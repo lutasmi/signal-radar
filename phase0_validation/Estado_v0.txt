@@ -1,0 +1,247 @@
+# Signal Radar - Estado Fase 0 (Validación de Fuentes)
+
+Fecha: 2026-06-05
+
+## Resultado General
+
+La validación de Fase 0 es satisfactoria.
+
+Fuentes principales operativas:
+
+* Capitol Trades ✅
+* SEC Form 4 ✅
+* USASpending ✅
+* Telegram ✅
+* Google Sheets ✅
+
+Fuentes secundarias o no necesarias:
+
+* Senate eFTS ⚠️
+* Quiver ⚠️
+* Yahoo Finance ⚠️
+
+Conclusión:
+
+Existe una combinación viable de fuentes gratuitas para construir la V1 sin dependencias de pago.
+
+---
+
+## Detalle por Fuente
+
+### Capitol Trades
+
+Estado: OK
+
+Bloqueante: NO
+
+Resultado:
+
+* Acceso web correcto (HTTP 200).
+* Se identifican filas reales de operaciones.
+* Extracción de:
+
+  * político
+  * cámara (House/Senate)
+  * ticker
+  * fecha
+  * importe
+  * tipo de operación
+
+Observaciones:
+
+* Cubre House + Senate.
+* Actualmente es la mejor fuente PTR disponible.
+* Sustituye a Senate eFTS para V1.
+
+Decisión:
+
+USAR en V1.
+
+---
+
+### SEC Form 4
+
+Estado: OK
+
+Bloqueante: NO
+
+Resultado:
+
+* Acceso correcto a EDGAR.
+* Obtención de Form 4 recientes.
+* Obtención de enlaces a filings.
+* Parsing XML viable.
+
+Observaciones:
+
+* Procesar únicamente transactionCode = P (Open Market Purchase).
+* Ignorar ejercicios de opciones y conversiones.
+
+Decisión:
+
+USAR en V1.
+
+---
+
+### USASpending
+
+Estado: OK
+
+Bloqueante: NO
+
+Resultado:
+
+* API accesible.
+* Obtención de contratos federales.
+* Contratos DoD recuperados correctamente.
+
+Observaciones:
+
+* recipient_name no incluye ticker.
+* Será necesario mantener tabla manual company_aliases.
+* Se detectó que algunos contratos devueltos utilizan fechas históricas; revisar filtros durante Fase 1.
+
+Decisión:
+
+USAR en V1.
+
+---
+
+### Telegram
+
+Estado: OK
+
+Bloqueante: NO
+
+Resultado:
+
+* Bot creado correctamente.
+* Token válido.
+* chat_id identificado.
+* Mensajes enviados correctamente.
+
+Decisión:
+
+USAR en V1.
+
+---
+
+### Google Sheets
+
+Estado: OK
+
+Bloqueante: NO
+
+Resultado:
+
+* Proyecto Google Cloud creado.
+* Google Sheets API habilitada.
+* Service Account configurada.
+* credentials.json operativo.
+* Escritura y lectura verificadas.
+
+Pestañas creadas:
+
+* raw_signals
+* ticker_scores
+* alerts_log
+* source_log
+
+Decisión:
+
+USAR como fuente de verdad en V1.
+
+---
+
+### Yahoo Finance (yfinance)
+
+Estado: DEGRADADO
+
+Bloqueante: NO
+
+Resultado:
+
+* Error 429 (Too Many Requests).
+
+Observaciones:
+
+* Problema conocido de Yahoo Finance.
+* No afecta a la validación de señales.
+* Precio y volumen pueden incorporarse más adelante.
+
+Alternativas:
+
+* Alpha Vantage
+* Stooq
+* Polygon (futuro)
+
+Decisión:
+
+NO NECESARIO para iniciar V1.
+
+---
+
+### Senate eFTS
+
+Estado: ERROR DNS
+
+Bloqueante: NO
+
+Resultado:
+
+* No se pudo resolver efts.senate.gov durante las pruebas.
+
+Observaciones:
+
+* Solo cubre Senado.
+* Capitol Trades ya cubre House + Senate.
+* Posible problema temporal de DNS o endpoint.
+
+Alternativas:
+
+* Capitol Trades
+* House Clerk manual
+
+Decisión:
+
+NO NECESARIO para iniciar V1.
+
+---
+
+### Quiver Quantitative
+
+Estado: REQUIERE API KEY
+
+Bloqueante: NO
+
+Resultado:
+
+* Todos los endpoints devuelven 401 Unauthorized sin credenciales.
+
+Observaciones:
+
+* No existe acceso gratuito útil para V1.
+
+Decisión:
+
+DESCARTADO para V1.
+
+---
+
+## Decisión Final
+
+Checklist Fase 0:
+
+* Fuentes PTR operativas: SI
+* Fuente insiders operativa: SI
+* Fuente contratos operativa: SI
+* Canal alertas operativo: SI
+* Persistencia operativa: SI
+
+Resultado:
+
+GO → FASE 1
+
+
+Nota: La fuente principal de señales PTR para V1 pasa a ser Capitol Trades.
+El diseño original basado en Senate eFTS queda obsoleto salvo que el endpoint vuelva a estar disponible y aporte valor diferencial.
