@@ -6,3 +6,4 @@ research/
 tmp_js/
 *.db
 .DS_Store
+data/*.csv
