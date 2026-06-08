@@ -1,0 +1,13 @@
+politician,asset_name,ticker,published,transaction_date,filing_delay,owner,trade_type,amount,price,source,source_url
+Susie Lee Democrat House NV,FULL HOUSE RESORTS INC,FLL,5 Jun 2026,21 Apr 2026,days 44,Undisclosed,sell,1K–15K,$2.46,capitol_trades,https://www.capitoltrades.com/trades
+Lloyd Doggett Democrat House TX,The Procter & Gamble Co,PG,5 Jun 2026,15 May 2026,days 20,Undisclosed,buy,1K–15K,$141.57,capitol_trades,https://www.capitoltrades.com/trades
+Tim Walberg Republican House MI,Amazon.com Inc,AMZN,4 Jun 2026,7 Feb 2025,days 481,Joint,buy,1K–15K,$229.15,capitol_trades,https://www.capitoltrades.com/trades
+Tim Walberg Republican House MI,Apple Inc,AAPL,4 Jun 2026,7 Feb 2025,days 481,Joint,buy,15K–50K,$227.63,capitol_trades,https://www.capitoltrades.com/trades
+Tim Walberg Republican House MI,Bank of America Corp,BAC,4 Jun 2026,7 Feb 2025,days 481,Joint,buy,15K–50K,$47.40,capitol_trades,https://www.capitoltrades.com/trades
+Tim Walberg Republican House MI,Boeing Co,BA,4 Jun 2026,7 Feb 2025,days 481,Joint,buy,15K–50K,$181.49,capitol_trades,https://www.capitoltrades.com/trades
+Tim Walberg Republican House MI,Caterpillar Inc,CAT,4 Jun 2026,7 Feb 2025,days 481,Joint,buy,15K–50K,$363.88,capitol_trades,https://www.capitoltrades.com/trades
+Tim Walberg Republican House MI,Chevron Corp,CVX,4 Jun 2026,7 Feb 2025,days 481,Joint,buy,15K–50K,$152.62,capitol_trades,https://www.capitoltrades.com/trades
+Tim Walberg Republican House MI,Eaton Corp PLC,ETN,4 Jun 2026,7 Feb 2025,days 481,Joint,buy,15K–50K,$313.05,capitol_trades,https://www.capitoltrades.com/trades
+Tim Walberg Republican House MI,Exxon Mobil Corp,XOM,4 Jun 2026,7 Feb 2025,days 481,Joint,buy,15K–50K,$108.89,capitol_trades,https://www.capitoltrades.com/trades
+Tim Walberg Republican House MI,FS SPECIALTY LENDING FUND,FSSL,4 Jun 2026,7 Feb 2025,days 481,Joint,buy,1K–15K,$2.52,capitol_trades,https://www.capitoltrades.com/trades
+Tim Walberg Republican House MI,FS SPECIALTY LENDING FUND,FSSL,4 Jun 2026,1 Jun 2026,days 2,Joint,sell,15K–50K,$11.83,capitol_trades,https://www.capitoltrades.com/trades

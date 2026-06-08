@@ -20,9 +20,17 @@ Fuentes secundarias o no necesarias:
 * Quiver ⚠️
 * Yahoo Finance ⚠️
 
-Conclusión:
+## Conclusión
 
-Existe una combinación viable de fuentes gratuitas para construir la V1 sin dependencias de pago.
+Arquitectura V1 validada:
+
+* PTR → Capitol Trades
+* Insiders → SEC Form 4
+* Contratos → USASpending
+* Histórico → Google Sheets
+* Alertas → Telegram
+
+La Fase 0 queda cerrada.
 
 ---
 
@@ -32,7 +40,7 @@ Existe una combinación viable de fuentes gratuitas para construir la V1 sin dep
 
 Estado: OK
 
-Bloqueante: NO
+Bloqueante: SI
 
 Resultado:
 
@@ -52,10 +60,11 @@ Observaciones:
 * Cubre House + Senate.
 * Actualmente es la mejor fuente PTR disponible.
 * Sustituye a Senate eFTS para V1.
+* Extracción básica validada con datos reales.
 
 Decisión:
 
-USAR en V1.
+USAR como fuente principal PTR en V1.
 
 ---
 
@@ -63,7 +72,7 @@ USAR en V1.
 
 Estado: OK
 
-Bloqueante: NO
+Bloqueante: SI
 
 Resultado:
 
@@ -87,7 +96,7 @@ USAR en V1.
 
 Estado: OK
 
-Bloqueante: NO
+Bloqueante: SI
 
 Resultado:
 
@@ -228,20 +237,73 @@ DESCARTADO para V1.
 
 ---
 
-## Decisión Final
+## Checklist Fase 0
 
-Checklist Fase 0:
-
-* Fuentes PTR operativas: SI
+* Fuente PTR operativa: SI
 * Fuente insiders operativa: SI
 * Fuente contratos operativa: SI
-* Canal alertas operativo: SI
+* Canal de alertas operativo: SI
 * Persistencia operativa: SI
 
 Resultado:
 
-GO → FASE 1
+✅ GO → FASE 1
 
+---
 
-Nota: La fuente principal de señales PTR para V1 pasa a ser Capitol Trades.
-El diseño original basado en Senate eFTS queda obsoleto salvo que el endpoint vuelva a estar disponible y aporte valor diferencial.
+## Decisiones Cerradas
+
+### Fuente PTR
+
+Fuente principal:
+
+* Capitol Trades
+
+Fuentes descartadas:
+
+* Senate eFTS (no necesario para V1)
+* Quiver Quantitative (requiere API key)
+
+### Fuente Insider
+
+Fuente principal:
+
+* SEC Form 4
+
+### Fuente Contratos
+
+Fuente principal:
+
+* USASpending
+
+### Fuente de Verdad
+
+Fuente principal:
+
+* Google Sheets
+
+SQLite queda reservado exclusivamente como caché técnica si más adelante resulta necesario.
+
+### Canal de Alertas
+
+Fuente principal:
+
+* Telegram Bot
+
+---
+
+## Objetivo Actual
+
+Capitol Trades → CSV
+
+## Estado Actual
+
+Fase 0 cerrada.
+
+## Siguiente Paso
+
+Construir un exportador sencillo que obtenga las últimas operaciones de Capitol Trades y genere:
+
+data/capitol_trades_latest.csv
+
+para inspeccionar datos reales, detectar clusters y validar si existe señal antes de construir scoring, SQLite o alertas automáticas.
