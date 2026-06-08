@@ -1,0 +1,261 @@
+# Signal Radar - Estado Fase 0
+
+Fecha: 2026-06-08
+
+## Resultado General
+
+Fase 0 cerrada correctamente.
+
+Se ha validado que existen fuentes gratuitas y operativas para construir la V1 de Signal Radar.
+
+## Arquitectura V1 validada
+
+PTR / congresistas:
+- Fuente principal: Capitol Trades
+
+Insiders:
+- Fuente principal: SEC Form 4
+
+Contratos federales:
+- Fuente principal: USASpending
+
+Histórico visible:
+- Google Sheets
+
+Alertas:
+- Telegram
+
+## Estado por fuente
+
+### Capitol Trades
+
+Estado: OK
+
+Bloqueante: SI
+
+Resultado:
+- Acceso web correcto.
+- Extracción de primera página validada.
+- Extracción multipágina validada.
+- Paginación HTML normal funcionando con `?page=N`.
+- No es necesario usar endpoints `_rsc`.
+- No es necesario usar Playwright en V1.
+- Se han extraído 120 registros en prueba local.
+- Se han detectado 53 compras útiles.
+
+Decisión:
+USAR como fuente principal PTR en V1.
+
+---
+
+### SEC Form 4
+
+Estado: OK
+
+Bloqueante: SI
+
+Resultado:
+- Acceso correcto a EDGAR.
+- Obtención de Form 4 recientes.
+- Obtención de links a filings.
+- Parsing XML viable.
+
+Decisión:
+USAR como fuente principal de insiders en V1.
+
+Notas:
+- Procesar únicamente `transactionCode = P` (open market purchase).
+- Ignorar ejercicios de opciones, grants y conversiones.
+
+---
+
+### USASpending
+
+Estado: OK
+
+Bloqueante: SI
+
+Resultado:
+- API accesible.
+- Obtención de contratos federales validada.
+- Contratos DoD recuperados correctamente.
+
+Decisión:
+USAR como fuente principal de contratos federales en V1.
+
+Notas:
+- `recipient_name` no incluye ticker.
+- Será necesaria una tabla manual `company_aliases`.
+- Revisar filtros de fecha durante Fase 1 porque algunos contratos devuelven fechas históricas.
+
+---
+
+### Google Sheets
+
+Estado: OK
+
+Bloqueante: NO
+
+Resultado:
+- Proyecto Google Cloud creado.
+- Google Sheets API habilitada.
+- Service Account configurada.
+- `credentials.json` operativo.
+- Escritura validada.
+
+Pestañas creadas:
+- raw_signals
+- ticker_scores
+- alerts_log
+- source_log
+
+Decisión:
+USAR como fuente de verdad visible en V1.
+
+---
+
+### Telegram
+
+Estado: OK
+
+Bloqueante: NO
+
+Resultado:
+- Bot creado.
+- Token válido.
+- `chat_id` identificado.
+- Envío de mensajes validado.
+
+Decisión:
+USAR como canal de alertas en V1.
+
+---
+
+### Yahoo Finance / yfinance
+
+Estado: DEGRADADO
+
+Bloqueante: NO
+
+Resultado:
+- Error 429 Too Many Requests durante validación.
+
+Decisión:
+NO NECESARIO para iniciar V1.
+
+Alternativas futuras:
+- Alpha Vantage
+- Stooq
+- Polygon
+
+---
+
+### Senate eFTS
+
+Estado: DESCARTADO V1
+
+Bloqueante: NO
+
+Resultado:
+- Error DNS durante validación local.
+- Además, solo cubre Senado.
+
+Decisión:
+NO USAR en V1.
+
+Motivo:
+Capitol Trades cubre House + Senate y ya funciona.
+
+---
+
+### Quiver Quantitative
+
+Estado: DESCARTADO V1
+
+Bloqueante: NO
+
+Resultado:
+- API devuelve 401 Unauthorized sin credenciales.
+
+Decisión:
+NO USAR en V1.
+
+Motivo:
+Requiere API key y no aporta valor necesario para arrancar.
+
+## Entregables completados
+
+### Fase 0.1 - Validación de fuentes
+
+Completado.
+
+Fuentes validadas:
+- Capitol Trades
+- SEC Form 4
+- USASpending
+- Google Sheets
+- Telegram
+
+### Fase 0.2 - Capitol Trades primera página
+
+Completado.
+
+Resultado:
+- Parser HTML validado.
+- Extracción de campos clave:
+  - político
+  - activo
+  - ticker
+  - fecha de operación
+  - tipo de operación
+  - importe
+  - retraso de filing
+
+### Fase 0.3 - Capitol Trades multipágina
+
+Completado.
+
+Resultado:
+- Paginación `?page=N` validada.
+- Extracción de 120 registros validada.
+- No se requiere `_rsc`.
+- No se requiere Playwright.
+
+## Decisiones cerradas
+
+1. Capitol Trades será la fuente principal PTR en V1.
+2. SEC Form 4 será la fuente principal de insiders.
+3. USASpending será la fuente principal de contratos.
+4. Google Sheets será la fuente de verdad visible.
+5. Telegram será el canal de alertas.
+6. SQLite queda reservado solo como caché técnica si llega a ser necesario.
+7. No se usará Quiver en V1.
+8. No se usará Senate eFTS en V1.
+9. No se usará Playwright mientras `?page=N` siga funcionando.
+10. No se construirá scoring hasta completar las tres ingestas principales.
+
+## Próximo objetivo
+
+Capitol Trades → Google Sheets
+
+## Estado actual
+
+Fase 0 cerrada.
+
+El collector de Capitol Trades ya puede extraer múltiples páginas y generar CSV.
+
+## Siguiente paso
+
+Construir la ingesta mínima:
+
+Capitol Trades multipágina
+→ normalización básica
+→ raw_signals en Google Sheets
+
+Restricciones del siguiente paso:
+- No añadir scoring.
+- No añadir Telegram.
+- No añadir SQLite.
+- No añadir nuevas fuentes.
+- No tocar SEC Form 4 todavía.
+- No tocar USASpending todavía.
