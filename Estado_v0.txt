@@ -259,3 +259,21 @@ Restricciones del siguiente paso:
 - No añadir nuevas fuentes.
 - No tocar SEC Form 4 todavía.
 - No tocar USASpending todavía.
+
+
+### Fase 1.0 - Capitol Trades → Google Sheets
+
+Completado.
+
+Resultado:
+- Collector multipágina operativo.
+- Extracción validada de 120 registros.
+- CSV generado correctamente.
+- Loader Google Sheets operativo.
+- 120 registros cargados en raw_signals.
+
+Arquitectura validada:
+
+Capitol Trades
+→ CSV
+→ Google Sheets (raw_signals)
