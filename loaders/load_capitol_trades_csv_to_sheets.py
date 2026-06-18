@@ -1,6 +1,7 @@
 import argparse
 import csv
 import os
+from datetime import datetime
 from pathlib import Path
 
 import gspread
@@ -11,6 +12,13 @@ from google.oauth2.service_account import Credentials
 CSV_FILE = Path("data/capitol_trades_latest.csv")
 CREDENTIALS_FILE = "credentials.json"
 WORKSHEET_NAME = "raw_capitol_trades"
+UNIQUE_KEY_COLUMNS = [
+    "politician",
+    "transaction_date",
+    "asset_name",
+    "trade_type",
+    "amount",
+]
 
 SCOPES = [
     "https://www.googleapis.com/auth/spreadsheets",
@@ -52,32 +60,87 @@ def open_raw_signals_worksheet(header, data_rows):
         return sheet.add_worksheet(title=WORKSHEET_NAME, rows=rows, cols=cols)
 
 
-def worksheet_is_empty(worksheet) -> bool:
-    return len(worksheet.get_all_values()) == 0
+def normalize_row(row, width):
+    return row + [""] * (width - len(row))
+
+
+def normalize_key_value(column, value):
+    value = value.strip()
+    if column != "transaction_date":
+        return value
+
+    for date_format in ("%d %b %Y", "%d %B %Y", "%m/%d/%Y", "%d/%m/%Y", "%Y-%m-%d"):
+        try:
+            return datetime.strptime(value, date_format).date().isoformat()
+        except ValueError:
+            pass
+
+    return value
+
+
+def build_key(header, row):
+    missing_columns = [column for column in UNIQUE_KEY_COLUMNS if column not in header]
+    if missing_columns:
+        raise ValueError(f"Missing key columns: {missing_columns}")
+
+    normalized_row = normalize_row(row, len(header))
+    return tuple(
+        normalize_key_value(column, normalized_row[header.index(column)])
+        for column in UNIQUE_KEY_COLUMNS
+    )
+
+
+def build_existing_keys(values, csv_header):
+    if len(values) <= 1:
+        return set()
+
+    header = values[0] if values[0] == csv_header else csv_header
+    return {build_key(header, row) for row in values[1:]}
+
+
+def filter_new_rows(header, data_rows, existing_keys):
+    new_rows = []
+    seen_keys = set(existing_keys)
+
+    for row in data_rows:
+        key = build_key(header, row)
+        if key in seen_keys:
+            continue
+
+        seen_keys.add(key)
+        new_rows.append(row)
+
+    return new_rows
 
 
 def append_csv_to_sheet(csv_file: Path):
     header, data_rows = read_csv(csv_file)
     worksheet = open_raw_signals_worksheet(header, data_rows)
+    existing_values = worksheet.get_all_values()
+    existing_keys = build_existing_keys(existing_values, header)
+    new_rows = filter_new_rows(header, data_rows, existing_keys)
 
     header_written = False
-    if worksheet_is_empty(worksheet):
+    if not existing_values:
         worksheet.append_row(header, value_input_option="USER_ENTERED")
         header_written = True
 
-    if data_rows:
-        worksheet.append_rows(data_rows, value_input_option="USER_ENTERED")
+    if new_rows:
+        worksheet.append_rows(new_rows, value_input_option="USER_ENTERED")
 
     print(f"CSV file: {csv_file}")
     print(f"Worksheet: {WORKSHEET_NAME}")
     print(f"Header written: {header_written}")
-    print(f"Rows appended: {len(data_rows)}")
+    print(f"Rows in CSV: {len(data_rows)}")
+    print(f"Existing keys: {len(existing_keys)}")
+    print(f"New rows appended: {len(new_rows)}")
+    print(f"Duplicates skipped: {len(data_rows) - len(new_rows)}")
 
-    if data_rows:
+    if new_rows:
         print("Example row appended:")
-        print(dict(zip(header, data_rows[0])))
+        print(dict(zip(header, new_rows[0])))
 
-    return len(data_rows), data_rows[0] if data_rows else []
+    return len(new_rows), new_rows[0] if new_rows else []
 
 
 def parse_args():
