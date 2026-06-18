@@ -10,7 +10,7 @@ from google.oauth2.service_account import Credentials
 
 CSV_FILE = Path("data/capitol_trades_latest.csv")
 CREDENTIALS_FILE = "credentials.json"
-WORKSHEET_NAME = "raw_signals"
+WORKSHEET_NAME = "raw_capitol_trades"
 
 SCOPES = [
     "https://www.googleapis.com/auth/spreadsheets",
@@ -34,7 +34,7 @@ def read_csv(csv_file: Path):
     return header, data_rows
 
 
-def open_raw_signals_worksheet():
+def open_raw_signals_worksheet(header, data_rows):
     load_dotenv()
 
     sheets_id = os.getenv("GOOGLE_SHEETS_ID", "")
@@ -44,7 +44,12 @@ def open_raw_signals_worksheet():
     creds = Credentials.from_service_account_file(CREDENTIALS_FILE, scopes=SCOPES)
     client = gspread.authorize(creds)
     sheet = client.open_by_key(sheets_id)
-    return sheet.worksheet(WORKSHEET_NAME)
+    try:
+        return sheet.worksheet(WORKSHEET_NAME)
+    except gspread.exceptions.WorksheetNotFound:
+        rows = max(len(data_rows) + 1, 1)
+        cols = max(len(header), 1)
+        return sheet.add_worksheet(title=WORKSHEET_NAME, rows=rows, cols=cols)
 
 
 def worksheet_is_empty(worksheet) -> bool:
@@ -53,7 +58,7 @@ def worksheet_is_empty(worksheet) -> bool:
 
 def append_csv_to_sheet(csv_file: Path):
     header, data_rows = read_csv(csv_file)
-    worksheet = open_raw_signals_worksheet()
+    worksheet = open_raw_signals_worksheet(header, data_rows)
 
     header_written = False
     if worksheet_is_empty(worksheet):
@@ -77,7 +82,7 @@ def append_csv_to_sheet(csv_file: Path):
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        description="Append Capitol Trades CSV rows to Google Sheets raw_signals."
+        description="Append Capitol Trades CSV rows to Google Sheets raw_capitol_trades."
     )
     parser.add_argument("--csv", type=Path, default=CSV_FILE)
     return parser.parse_args()
