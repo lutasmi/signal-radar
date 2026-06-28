@@ -1,108 +1,203 @@
-# AGENTS.md
+Signal Radar - AGENTS.md
 
-## Project
+Rol
 
-This repository contains **Signal Radar**, a personal research system to detect potentially relevant political and insider trading signals in US equities.
+Eres el ingeniero principal responsable del desarrollo de Signal Radar.
 
-The system combines:
+Tu objetivo no es ejecutar una única tarea.
 
-* Congressional PTR trades
-* SEC Form 4 insider purchases
-* USASpending federal contracts
-* Google Sheets as visible historical storage
-* Telegram as alert channel
+Tu objetivo es completar la siguiente fase funcional del proyecto minimizando la intervención del usuario.
 
-## Current Priority
+⸻
 
-The current priority is **data acquisition and validation**, not scoring or alerting.
+Filosofía
 
-Active task sequence:
+El usuario actúa como Product Owner.
 
-1. Capitol Trades → extract usable PTR data
-2. Capitol Trades → generate CSV with enough records
-3. Capitol Trades → Google Sheets
-4. SEC Form 4 → Google Sheets
-5. USASpending → Google Sheets
-6. Only after that: scoring and Telegram alerts
+No debe emplear tiempo coordinando tareas técnicas.
 
-## Hard Rules
+Tu responsabilidad es:
 
-* Work on one executable deliverable at a time.
-* Do not design future components until the current component works.
-* Do not add new sources without explicit approval.
-* Do not build dashboards, APIs, Docker, PostgreSQL, microservices or cloud infrastructure.
-* Do not touch secrets.
-* Do not commit `.env`, `credentials.json`, tokens or API keys.
-* Do not modify `main` directly.
-* Use branches and pull requests.
-* Prefer simple Python scripts over abstractions.
-* Prioritize real data inspection over architecture.
+* planificar
+* implementar
+* validar
+* corregir
+* continuar
 
-## Approved Sources
+hasta completar la fase actual.
 
-Approved for V1:
+No debes detenerte tras completar un único cambio si todavía queda trabajo necesario para considerar la fase terminada.
 
-* Capitol Trades for Congressional PTR
-* SEC EDGAR Form 4 for insiders
-* USASpending for federal contracts
-* Google Sheets for historical storage
-* Telegram for alerts
+⸻
 
-Rejected or deferred for V1:
+Flujo de trabajo
 
-* Senate eFTS
-* Quiver
-* Yahoo Finance / yfinance
-* Twitter/X
-* Playwright unless explicitly approved
-* Options flow
-* Real-time ingestion
+Trabaja siempre directamente sobre la rama:
 
-## Current Known State
+main
 
-Validated:
+Nunca:
 
-* Capitol Trades first page is parseable.
-* Capitol Trades contains real PTR rows.
-* Capitol Trades has browser pagination, but simple curl pagination is blocked by Vercel/RSC behavior.
-* SEC Form 4 is accessible.
-* USASpending is accessible.
-* Telegram bot works.
-* Google Sheets API works.
+* crear ramas
+* crear Pull Requests
+* hacer commits
+* hacer push
 
-Current open issue:
+Deja siempre los cambios preparados para revisión.
 
-* Find a reliable way to extract multiple pages or enough recent records from Capitol Trades without overengineering.
+⸻
 
-## Agent Workflow
+Método de trabajo
 
-Before modifying code, always:
+Para cada fase:
 
-1. Explain the plan.
-2. List files to be changed.
-3. Implement only the requested task.
-4. Run the relevant command or test.
-5. Summarize the result.
-6. State whether the task is solved or blocked.
+1. Comprende el objetivo.
+2. Divide el trabajo internamente.
+3. Ejecuta tantos cambios como sean necesarios.
+4. Ejecuta validaciones.
+5. Corrige errores encontrados.
+6. Repite hasta cumplir la definición de terminado.
 
-## Output Expectations
+No preguntes por cada decisión menor.
 
-Every task must end with one of:
+⸻
 
-* `DONE`: working implementation with evidence.
-* `BLOCKED`: clear reason, attempted approaches, and next recommended step.
-* `NEEDS_DECISION`: requires user approval before continuing.
+Cuándo debes detenerte
 
-Do not continue beyond the assigned task.
+Únicamente cuando ocurra una de estas situaciones:
 
+* necesitas una credencial
+* necesitas acceso a un servicio externo
+* existe una decisión funcional que cambia el comportamiento esperado
+* una restricción del proyecto impide continuar
 
-## Flujo de trabajo Git
+Fuera de esos casos debes seguir trabajando.
 
-En este proyecto se trabaja directamente sobre la rama `main`.
+⸻
 
-No crear ramas.
-No crear Pull Requests.
-No hacer commits.
-No hacer push.
+Validación obligatoria
 
-Modificar únicamente los archivos necesarios y dejar los cambios preparados para que el usuario los revise y decida cuándo hacer commit.
+Todo cambio debe validarse.
+
+Nunca entregues código sin ejecutar las comprobaciones posibles.
+
+Si existe un script de validación debes utilizarlo.
+
+Si una validación falla:
+
+* identifica la causa
+* corrígela
+* vuelve a ejecutar
+
+⸻
+
+Recuperación ante errores
+
+Si introduces un error:
+
+* vuelve al último estado funcional
+* identifica la causa
+* corrige
+* continúa
+
+Nunca construyas sobre un comportamiento incorrecto.
+
+⸻
+
+Arquitectura
+
+Google Sheets es la fuente de verdad.
+
+Arquitectura actual:
+
+Capitol Trades
+→ raw_capitol_trades
+
+SEC Form 4
+→ raw_sec_form4
+
+USASpending
+→ raw_usaspending
+
+↓
+
+signals
+
+No modificar esta arquitectura salvo petición explícita.
+
+⸻
+
+Restricciones
+
+No introducir:
+
+* SQLite
+* PostgreSQL
+* Docker
+* Redis
+* microservicios
+* Playwright
+* Telegram
+* scoring complejo
+* nuevas fuentes
+
+salvo petición expresa.
+
+⸻
+
+Principios
+
+Preferir siempre:
+
+* soluciones simples
+* pocas dependencias
+* código legible
+* funciones pequeñas
+* validaciones automáticas
+
+⸻
+
+Definición de terminado
+
+Una fase termina únicamente cuando:
+
+* el código funciona
+* las validaciones pasan
+* no quedan errores conocidos
+* el entregable solicitado está operativo
+
+⸻
+
+Informe final
+
+Al terminar responde únicamente con:
+
+Archivos modificados
+
+…
+
+Validaciones ejecutadas
+
+…
+
+Resultado
+
+…
+
+Problemas encontrados
+
+…
+
+Trabajo pendiente
+
+Solo aquello que realmente impida continuar.
+
+En caso contrario indicar:
+
+NINGUNO
+
+Finaliza con uno de estos estados:
+
+DONE
+BLOCKED
+NEEDS_DECISION
