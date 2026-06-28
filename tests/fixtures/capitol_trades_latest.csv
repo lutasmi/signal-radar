@@ -1,0 +1,3 @@
+politician,asset_name,ticker,published,transaction_date,filing_delay,owner,trade_type,amount,price,source,source_url
+Alice Example Democrat House CA,Example Technologies Inc,EXM,5 Jan 2026,2 Jan 2026,days 3,Self,buy,1K-15K,$10.00,capitol_trades,https://example.test/capitol/alice-exm
+Bob Example Republican Senate TX,Example Technologies Inc,EXM,8 Jan 2026,6 Jan 2026,days 2,Joint,buy,15K-50K,$11.00,capitol_trades,https://example.test/capitol/bob-exm

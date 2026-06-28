@@ -153,7 +153,7 @@ def write_csv(trades, output_file: Path = OUTPUT_FILE):
     output_file.parent.mkdir(parents=True, exist_ok=True)
 
     with output_file.open("w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=FIELDNAMES)
+        writer = csv.DictWriter(f, fieldnames=FIELDNAMES, lineterminator="\n")
         writer.writeheader()
         writer.writerows(trades)
 

@@ -1,50 +1,26 @@
 import argparse
-import csv
-import os
+import sys
 from pathlib import Path
 
 import gspread
-from dotenv import load_dotenv
-from google.oauth2.service_account import Credentials
 
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from radar import loaders
+from radar.sheets import open_sheet
 
 CSV_FILE = Path("data/usaspending_latest.csv")
-CREDENTIALS_FILE = "credentials.json"
 WORKSHEET_NAME = "raw_usaspending"
 UNIQUE_KEY_COLUMNS = ["award_id"]
 
-SCOPES = [
-    "https://www.googleapis.com/auth/spreadsheets",
-    "https://www.googleapis.com/auth/drive",
-]
-
-
 def read_csv(csv_file: Path):
-    if not csv_file.exists():
-        raise FileNotFoundError(f"CSV not found: {csv_file}")
-
-    with csv_file.open("r", newline="", encoding="utf-8") as f:
-        reader = csv.reader(f)
-        rows = list(reader)
-
-    if not rows:
-        raise ValueError(f"CSV is empty: {csv_file}")
-
-    header = rows[0]
-    data_rows = rows[1:]
-    return header, data_rows
+    return loaders.read_csv(csv_file)
 
 
-def open_raw_signals_worksheet(header, data_rows):
-    load_dotenv()
-
-    sheets_id = os.getenv("GOOGLE_SHEETS_ID", "")
-    if not sheets_id:
-        raise ValueError("GOOGLE_SHEETS_ID not found in environment")
-
-    creds = Credentials.from_service_account_file(CREDENTIALS_FILE, scopes=SCOPES)
-    client = gspread.authorize(creds)
-    sheet = client.open_by_key(sheets_id)
+def open_raw_worksheet(header, data_rows):
+    sheet = open_sheet()
     try:
         return sheet.worksheet(WORKSHEET_NAME)
     except gspread.exceptions.WorksheetNotFound:
@@ -53,45 +29,21 @@ def open_raw_signals_worksheet(header, data_rows):
         return sheet.add_worksheet(title=WORKSHEET_NAME, rows=rows, cols=cols)
 
 
-def normalize_row(row, width):
-    return row + [""] * (width - len(row))
-
-
 def build_key(header, row):
-    missing_columns = [column for column in UNIQUE_KEY_COLUMNS if column not in header]
-    if missing_columns:
-        raise ValueError(f"Missing key columns: {missing_columns}")
-
-    normalized_row = normalize_row(row, len(header))
-    return tuple(normalized_row[header.index(column)].strip() for column in UNIQUE_KEY_COLUMNS)
+    return loaders.build_key(header, row, UNIQUE_KEY_COLUMNS)
 
 
 def build_existing_keys(values, csv_header):
-    if len(values) <= 1:
-        return set()
-
-    header = values[0] if values[0] == csv_header else csv_header
-    return {build_key(header, row) for row in values[1:]}
+    return loaders.build_existing_keys(values, csv_header, UNIQUE_KEY_COLUMNS)
 
 
 def filter_new_rows(header, data_rows, existing_keys):
-    new_rows = []
-    seen_keys = set(existing_keys)
-
-    for row in data_rows:
-        key = build_key(header, row)
-        if key in seen_keys:
-            continue
-
-        seen_keys.add(key)
-        new_rows.append(row)
-
-    return new_rows
+    return loaders.filter_new_rows(header, data_rows, existing_keys, UNIQUE_KEY_COLUMNS)
 
 
 def append_csv_to_sheet(csv_file: Path):
     header, data_rows = read_csv(csv_file)
-    worksheet = open_raw_signals_worksheet(header, data_rows)
+    worksheet = open_raw_worksheet(header, data_rows)
     existing_values = worksheet.get_all_values()
     existing_keys = build_existing_keys(existing_values, header)
     new_rows = filter_new_rows(header, data_rows, existing_keys)

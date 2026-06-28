@@ -1,0 +1,2 @@
+ticker,issuer_name,insider_name,insider_title,transaction_date,transaction_code,acquired_disposed,shares,price,estimated_value,filing_date,source_url
+EXM,Example Technologies Inc,Jane Insider,Chief Financial Officer,2026-01-10,P,A,100,10.00,1000,2026-01-12,https://example.test/sec/exm-jane

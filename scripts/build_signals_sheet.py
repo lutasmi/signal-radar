@@ -1,14 +1,10 @@
-import os
 from collections import Counter
-from datetime import date, datetime
-from hashlib import sha256
 
-import gspread
-from dotenv import load_dotenv
-from google.oauth2.service_account import Credentials
+from radar.dates import normalize_date
+from radar.records import get_value, stable_id
+from radar.sheets import open_sheet, replace_worksheet
 
 
-CREDENTIALS_FILE = "credentials.json"
 OUTPUT_WORKSHEET_NAME = "signals"
 
 RAW_CAPITOL_TRADES = "raw_capitol_trades"
@@ -69,81 +65,18 @@ SIGNALS_HEADER = [
     "raw_key",
 ]
 
-SCOPES = [
-    "https://www.googleapis.com/auth/spreadsheets",
-    "https://www.googleapis.com/auth/drive",
-]
-
-MONTHS = {
-    "jan": 1,
-    "ene": 1,
-    "feb": 2,
-    "mar": 3,
-    "apr": 4,
-    "abr": 4,
-    "may": 5,
-    "jun": 6,
-    "jul": 7,
-    "aug": 8,
-    "ago": 8,
-    "sep": 9,
-    "oct": 10,
-    "nov": 11,
-    "dec": 12,
-    "dic": 12,
-}
-
 DATE_WARNINGS = []
 
 
-def open_sheet():
-    load_dotenv()
-
-    sheets_id = os.getenv("GOOGLE_SHEETS_ID", "")
-    if not sheets_id:
-        raise ValueError("GOOGLE_SHEETS_ID not found in environment")
-
-    creds = Credentials.from_service_account_file(CREDENTIALS_FILE, scopes=SCOPES)
-    client = gspread.authorize(creds)
-    return client.open_by_key(sheets_id)
-
-
-def get_value(row, column):
-    value = row.get(column, "")
-    if value is None:
-        return ""
-    return str(value).strip()
-
-
 def make_signal_id(source, raw_key):
-    digest = sha256(f"{source}|{raw_key}".encode("utf-8")).hexdigest()[:16]
-    return f"{source}_{digest}"
+    return stable_id(source, [source, raw_key])
 
 
 def normalize_signal_date(value):
-    original_value = value
-    value = value.strip()
-    if not value:
-        return value
-
-    try:
-        return datetime.strptime(value, "%Y-%m-%d").date().isoformat()
-    except ValueError:
-        pass
-
-    parts = value.replace(",", " ").split()
-    if len(parts) == 3:
-        day_text, month_text, year_text = parts
-        month = MONTHS.get(month_text[:3].lower())
-        if month:
-            try:
-                return date(int(year_text), month, int(day_text)).isoformat()
-            except ValueError:
-                pass
-
-    print(f"WARNING: could not parse signal_date: {original_value}")
-    DATE_WARNINGS.append(original_value)
-    return original_value
+    normalized_value = normalize_date(value, DATE_WARNINGS)
+    if normalized_value == value.strip() and value.strip() in DATE_WARNINGS:
+        print(f"WARNING: could not parse signal_date: {value}")
+    return normalized_value
 
 
 def build_signal(
@@ -207,7 +140,18 @@ def normalize_capitol_trade(row):
 
 
 def normalize_sec_form4(row):
-    raw_key = get_value(row, "source_url")
+    raw_key = "|".join(
+        [
+            get_value(row, "source_url"),
+            get_value(row, "ticker"),
+            get_value(row, "insider_name"),
+            get_value(row, "transaction_date"),
+            get_value(row, "transaction_code"),
+            get_value(row, "acquired_disposed"),
+            get_value(row, "shares"),
+            get_value(row, "price"),
+        ]
+    )
     return build_signal(
         signal_date=get_value(row, "transaction_date"),
         signal_type="INSIDER_BUY",
@@ -279,37 +223,18 @@ def build_signals(sheet):
     for worksheet_name, normalize in source_specs:
         for row in read_records(sheet, worksheet_name):
             signal = normalize(row)
-            raw_key = signal["raw_key"]
-            if raw_key in seen_raw_keys:
+            source_raw_key = (signal["source"], signal["raw_key"])
+            if source_raw_key in seen_raw_keys:
                 continue
 
-            seen_raw_keys.add(raw_key)
+            seen_raw_keys.add(source_raw_key)
             signals.append(signal)
 
     return signals
 
 
-def open_or_create_signals_worksheet(sheet, row_count):
-    try:
-        return sheet.worksheet(OUTPUT_WORKSHEET_NAME)
-    except gspread.exceptions.WorksheetNotFound:
-        rows = max(row_count + 1, 1)
-        cols = len(SIGNALS_HEADER)
-        return sheet.add_worksheet(
-            title=OUTPUT_WORKSHEET_NAME,
-            rows=rows,
-            cols=cols,
-        )
-
-
 def write_signals(sheet, signals):
-    worksheet = open_or_create_signals_worksheet(sheet, len(signals))
-    rows = [SIGNALS_HEADER]
-    rows.extend([[signal[column] for column in SIGNALS_HEADER] for signal in signals])
-
-    worksheet.clear()
-    if rows:
-        worksheet.update(rows, value_input_option="USER_ENTERED")
+    replace_worksheet(sheet, OUTPUT_WORKSHEET_NAME, SIGNALS_HEADER, signals)
 
 
 def print_summary(signals):

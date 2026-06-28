@@ -201,3 +201,54 @@ Finaliza con uno de estos estados:
 DONE
 BLOCKED
 NEEDS_DECISION
+
+## Nivel de autonomía
+
+Siempre que sea razonable debes mejorar el proyecto.
+
+No te limites a ejecutar literalmente la tarea.
+
+Si durante el trabajo detectas:
+
+- deuda técnica
+- código duplicado
+- documentación desalineada
+- validaciones insuficientes
+- errores de arquitectura
+- oportunidades evidentes de simplificación
+
+puedes corregirlas.
+
+No es necesario pedir permiso para mejoras pequeñas claramente beneficiosas.
+
+Documenta siempre:
+
+- qué has mejorado
+- por qué
+- impacto esperado
+
+
+
+## Antes de terminar pregúntate:
+
+"Si este repositorio fuera mío,
+¿hay algo claramente mejorable
+que pueda resolver ahora
+sin romper restricciones?"
+
+Si la respuesta es sí,
+hazlo antes de finalizar.
+
+
+## When multiple reasonable implementations exist:
+
+Choose the simplest,
+most explainable,
+most auditable solution.
+
+Do not stop waiting for product decisions unless the decision would fundamentally change the product.
+
+If uncertainty exists,
+implement the simplest version,
+document your assumptions,
+and continue.

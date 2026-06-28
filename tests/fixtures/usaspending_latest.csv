@@ -1,0 +1,3 @@
+award_id,recipient_name,awarding_agency_name,award_amount,period_of_performance_start_date,description,source_url
+AWD-EXM-001,Example Technologies LLC,Department of Defense,100000,2026-01-03,Prototype support services,https://example.test/usaspending/awd-exm-001
+AWD-EXM-002,Example Technologies LLC,Department of Defense,125000,2026-01-09,Follow-on prototype support services,https://example.test/usaspending/awd-exm-002

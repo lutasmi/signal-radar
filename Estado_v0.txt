@@ -1,5 +1,3 @@
-Añade o sustituye el bloque de estado por este:
-
 Signal Radar - Estado v0
 
 Objetivo
@@ -7,34 +5,67 @@ Objetivo
 Detectar señales combinadas entre:
 
 * Capitol Trades (PTR)
-* SEC Form 4 (Insiders)
-* USASpending (Contratos federales)
+* SEC Form 4 (insiders)
+* USASpending (contratos federales)
 
 Manteniendo una arquitectura simple:
 
 Fuente
 → CSV
 → Google Sheets
-→ Alertas
+→ signals
+→ cluster_signals
+→ correlation_signals
+→ priority_signals
+→ review_queue
+→ alertas externas futuras
+
+Google Sheets es la fuente de verdad.
+
+⸻
+
+Arquitectura interna
+
+collectors/
+→ CSV
+
+loaders/
+→ raw Google Sheets
+
+radar/
+→ utilidades compartidas de Sheets, fechas, filas, IDs y deduplicación
+
+scripts/build_*
+→ transformaciones determinísticas
+
+scripts/validate_*
+→ validaciones locales y contra Google Sheets
+
+scripts/rebuild_radar.py
+→ punto único de ejecución del radar derivado completo
+
+scripts/validate_all.py
+→ punto único de validación local sin escribir en Google Sheets
+
+tests/fixtures/
+→ CSV mínimos y determinísticos para validación reproducible sin credenciales ni internet
 
 ⸻
 
 Estado actual
 
-Fase 1 completada
-
-Capitol Trades
+Fase 1 completada - Ingesta Capitol Trades
 
 Capitol Trades
 → CSV
-→ Google Sheets
+→ raw_capitol_trades
 
 Estado:
 
-* Collector multipágina operativo.
-* Extracción validada de 120 registros.
-* CSV generado correctamente.
-* Loader Google Sheets operativo.
+* Collector existente.
+* Loader Google Sheets existente.
+* Deduplicación mínima existente en el loader.
+* Los CSV locales son artefactos generados y no deben usarse para determinar el estado del proyecto.
 
 Archivos:
 
@@ -47,18 +78,19 @@ raw_capitol_trades
 
 ⸻
 
-SEC Form 4
+Fase 2 completada - Ingesta SEC Form 4
 
 SEC Form 4
 → CSV
-→ Google Sheets
+→ raw_sec_form4
 
 Estado:
 
-* Collector operativo.
+* Collector existente.
 * Fuente SEC EDGAR validada.
 * Filtrado de compras open market (transaction_code = P).
-* Loader Google Sheets operativo.
+* Loader Google Sheets existente.
+* Deduplicación existente en el loader con clave compuesta por filing y datos de transacción.
 
 Archivos:
 
@@ -71,18 +103,19 @@ raw_sec_form4
 
 ⸻
 
-USASpending
+Fase 3 completada - Ingesta USASpending
 
 USASpending
 → CSV
-→ Google Sheets
+→ raw_usaspending
 
 Estado:
 
-* Collector operativo.
+* Collector existente.
 * API oficial validada.
-* Contratos DoD extraídos correctamente.
-* Loader Google Sheets operativo.
+* Contratos DoD extraídos.
+* Loader Google Sheets existente.
+* Deduplicación mínima existente en el loader.
 
 Archivos:
 
@@ -95,14 +128,164 @@ raw_usaspending
 
 ⸻
 
-Arquitectura actual validada
+Fase 4 consolidada - signals baseline
+
+raw_capitol_trades
+raw_sec_form4
+raw_usaspending
+→ signals
+
+Estado:
+
+* scripts/build_signals_sheet.py existe.
+* La pestaña signals existe.
+* La normalización de signal_date está implementada.
+* Existe validación offline de CSV, idempotencia de loaders y generación determinística de signals.
+* El flujo collectors → CSV → raw sheets → signals fue validado contra Google Sheets real el 2026-06-28.
+* Existe CI mínimo para validación local con fixtures; no ejecuta collectors, loaders ni escrituras en Google Sheets.
+
+Archivo:
+
+scripts/build_signals_sheet.py
+
+Pestaña Google Sheets:
+
+signals
+
+⸻
+
+Fase 5 completada - cluster_signals
+
+signals
+→ cluster_signals
+
+Estado:
+
+* scripts/build_cluster_signals_sheet.py existe.
+* La pestaña cluster_signals existe.
+* Detecta actividad repetida por ticker y contratos repetidos por entidad en una ventana simple de 90 días.
+* Cada cluster incluye reason y source_signal_ids para explicar y auditar por qué existe.
+* La generación es idempotente y fue validada contra Google Sheets real el 2026-06-28.
+
+Archivo:
+
+scripts/build_cluster_signals_sheet.py
+
+Pestaña Google Sheets:
+
+cluster_signals
+
+⸻
+
+Fase 6 completada - correlation_signals
+
+signals
+cluster_signals
+→ correlation_signals
+
+Estado:
+
+* scripts/build_correlation_signals_sheet.py existe.
+* La pestaña correlation_signals existe.
+* Conecta clusters con señales de mercado relacionadas por ticker o por entidad.
+* Cada correlación incluye reason, cluster_ids y signal_ids para auditoría.
+* La generación es idempotente y fue validada contra Google Sheets real el 2026-06-28.
+* scripts/rebuild_radar.py reconstruye signals, cluster_signals y correlation_signals en orden.
+
+Archivos:
+
+scripts/build_correlation_signals_sheet.py
+scripts/rebuild_radar.py
+
+Pestaña Google Sheets:
+
+correlation_signals
+
+⸻
+
+Fase 7 completada - priority_signals
+
+cluster_signals
+correlation_signals
+→ priority_signals
+
+Estado:
+
+* scripts/build_priority_signals_sheet.py existe.
+* La pestaña priority_signals existe.
+* Ordena oportunidades con prioridad HIGH/MEDIUM/LOW usando reglas simples y explícitas.
+* Cada prioridad incluye reason, priority_reason, cluster_ids y signal_ids.
+* No introduce scoring complejo ni modelos opacos.
+* La generación es idempotente y fue validada contra Google Sheets real el 2026-06-28.
+* scripts/rebuild_radar.py reconstruye signals, cluster_signals, correlation_signals y priority_signals en orden.
+
+Archivos:
+
+scripts/build_priority_signals_sheet.py
+scripts/rebuild_radar.py
+
+Pestaña Google Sheets:
+
+priority_signals
+
+⸻
+
+Fase 8 completada - review_queue
+
+priority_signals
+→ review_queue
+
+Estado:
+
+* scripts/build_review_queue_sheet.py existe.
+* La pestaña review_queue existe.
+* Entrega oportunidades priorizadas a una cola interna de revisión humana.
+* Conserva review_status y review_note existentes cuando se reconstruye.
+* No introduce Telegram ni canales externos.
+* La generación es idempotente y fue validada contra Google Sheets real el 2026-06-28.
+* scripts/rebuild_radar.py reconstruye todas las hojas derivadas hasta review_queue.
+* La lógica común de Sheets, fechas, filas, IDs y deduplicación vive en radar/.
+
+Archivos:
+
+scripts/build_review_queue_sheet.py
+scripts/rebuild_radar.py
+
+Pestaña Google Sheets:
+
+review_queue
+
+⸻
+
+Arquitectura actual
 
 Capitol Trades
 → raw_capitol_trades
+
 SEC Form 4
 → raw_sec_form4
+
 USASpending
 → raw_usaspending
+
+raw_capitol_trades
+raw_sec_form4
+raw_usaspending
+→ signals
+
+signals
+→ cluster_signals
+
+signals
+cluster_signals
+→ correlation_signals
+
+cluster_signals
+correlation_signals
+→ priority_signals
+
+priority_signals
+→ review_queue
 
 Google Sheets es la fuente de verdad.
 
@@ -114,20 +297,16 @@ Decisiones cerradas
 * SEC Form 4 = fuente principal insiders.
 * USASpending = fuente principal contratos.
 * Google Sheets = fuente de verdad.
-* Telegram = canal futuro de alertas.
+* Telegram = canal futuro de alertas, no iniciar todavía.
 * No usar SQLite en V1.
 * No usar Playwright mientras Capitol Trades HTML funcione.
 * No añadir nuevas fuentes.
 
 ⸻
 
-Nota importante
+Notas importantes
 
-La pestaña:
-
-raw_signals
-
-queda considerada obsoleta.
+La pestaña raw_signals queda considerada obsoleta.
 
 Motivo:
 
@@ -141,16 +320,16 @@ raw_capitol_trades
 raw_sec_form4
 raw_usaspending
 
+El workflow .github/workflows/local_validation.yml ejecuta validación local con fixtures en cada push y pull request. No hay automatización diaria de ingesta production-ready todavía.
+
 ⸻
 
 Próximo objetivo
 
-Implementar deduplicación mínima por fuente.
+Preparar la Fase 9 - dashboard o entrega externa.
 
-Antes de avanzar:
+Antes de avanzar a Telegram o dashboard:
 
-1. Revisar volumen real de cada pestaña.
-2. Definir clave única por fuente.
-3. Evitar recargas duplicadas en Google Sheets.
-
-No iniciar scoring ni Telegram todavía.
+1. Mantener Google Sheets como fuente de verdad.
+2. No introducir Telegram ni nuevas fuentes sin decisión explícita.
+3. Definir si la siguiente experiencia debe ser dashboard visual o canal externo de alertas.

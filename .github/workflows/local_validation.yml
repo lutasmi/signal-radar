@@ -1,0 +1,30 @@
+name: Local validation
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Python dependencies
+        run: python3 -m pip install -r requirements.txt
+
+      - name: Compile Python modules
+        run: python3 -m compileall radar collectors loaders scripts
+
+      - name: Run fixture-backed validation
+        run: python3 scripts/validate_all.py
+
+      - name: Check patch whitespace
+        run: git diff --check
