@@ -1,0 +1,54 @@
+name: Daily radar
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "15 7 * * *"
+
+jobs:
+  run-radar:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Python dependencies
+        run: python3 -m pip install -r requirements.txt
+
+      - name: Write Google credentials
+        env:
+          GOOGLE_CREDENTIALS_JSON: ${{ secrets.GOOGLE_CREDENTIALS_JSON }}
+          GOOGLE_SHEETS_ID: ${{ secrets.GOOGLE_SHEETS_ID }}
+        run: |
+          set +x
+          test -n "$GOOGLE_CREDENTIALS_JSON"
+          test -n "$GOOGLE_SHEETS_ID"
+          printf '%s' "$GOOGLE_CREDENTIALS_JSON" > credentials.json
+          printf 'GOOGLE_SHEETS_ID=%s\n' "$GOOGLE_SHEETS_ID" > .env
+
+      - name: Collect Capitol Trades
+        run: python3 collectors/collect_capitol_trades.py --max-rows 120 --delay 0.5
+
+      - name: Collect SEC Form 4
+        run: python3 collectors/collect_sec_form4.py --feed-pages 6 --max-filings 150 --delay 0.05
+
+      - name: Collect USASpending
+        run: python3 collectors/collect_usaspending.py
+
+      - name: Load Capitol Trades
+        run: python3 loaders/load_capitol_trades_csv_to_sheets.py
+
+      - name: Load SEC Form 4
+        run: python3 loaders/load_sec_form4_csv_to_sheets.py
+
+      - name: Load USASpending
+        run: python3 loaders/load_usaspending_csv_to_sheets.py
+
+      - name: Rebuild radar
+        run: python3 scripts/rebuild_radar.py

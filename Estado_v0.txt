@@ -143,6 +143,7 @@ Estado:
 * Existe validación offline de CSV, idempotencia de loaders y generación determinística de signals.
 * El flujo collectors → CSV → raw sheets → signals fue validado contra Google Sheets real el 2026-06-28.
 * Existe CI mínimo para validación local con fixtures; no ejecuta collectors, loaders ni escrituras en Google Sheets.
+* Existe workflow diario controlado con ejecución manual para collectors → loaders → rebuild_radar usando secretos de GitHub.
 
 Archivo:
 
@@ -320,16 +321,23 @@ raw_capitol_trades
 raw_sec_form4
 raw_usaspending
 
-El workflow .github/workflows/local_validation.yml ejecuta validación local con fixtures en cada push y pull request. No hay automatización diaria de ingesta production-ready todavía.
+El workflow .github/workflows/local_validation.yml ejecuta validación local con fixtures en cada push y pull request.
+
+El workflow .github/workflows/daily_radar.yml ejecuta ingesta diaria controlada y también puede lanzarse manualmente desde GitHub Actions. Requiere los secretos:
+
+GOOGLE_CREDENTIALS_JSON
+GOOGLE_SHEETS_ID
+
+El workflow escribe esos secretos en credentials.json y .env dentro del runner, ejecuta collectors, loaders y scripts/rebuild_radar.py, y no commitea CSV generados.
 
 ⸻
 
 Próximo objetivo
 
-Preparar la Fase 9 - dashboard o entrega externa.
+Observar estabilidad de la automatización diaria y endurecer validaciones operativas.
 
 Antes de avanzar a Telegram o dashboard:
 
 1. Mantener Google Sheets como fuente de verdad.
 2. No introducir Telegram ni nuevas fuentes sin decisión explícita.
-3. Definir si la siguiente experiencia debe ser dashboard visual o canal externo de alertas.
+3. Revisar fallos reales del workflow diario antes de añadir nuevas superficies de producto.

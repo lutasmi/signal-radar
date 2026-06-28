@@ -66,6 +66,13 @@ python3 scripts/validate_all.py --generated-csv
 
 GitHub Actions runs the same fixture-backed local validation on every push and pull request through `.github/workflows/local_validation.yml`. The workflow does not run collectors, loaders, Google Sheets writes, or credential-dependent checks.
 
+Daily automation is defined in `.github/workflows/daily_radar.yml`. It can be started manually from GitHub Actions using the `Daily radar` workflow, and it also runs once per day on schedule. Required repository secrets:
+
+* `GOOGLE_CREDENTIALS_JSON`: full Google service account JSON.
+* `GOOGLE_SHEETS_ID`: target spreadsheet ID.
+
+The daily workflow writes those secrets into runner-local `credentials.json` and `.env`, runs the three approved collectors, loads CSV artifacts into raw Google Sheets tabs, then runs `python3 scripts/rebuild_radar.py`. Generated CSVs remain ignored by git and are not committed.
+
 ## Internal Architecture
 
 * `collectors/`: source-specific CSV collectors.
@@ -123,6 +130,8 @@ Google Sheets operations require:
 
 * `GOOGLE_SHEETS_ID` in `.env`
 * `credentials.json` for a Google service account
+
+In GitHub Actions, set `GOOGLE_SHEETS_ID` and `GOOGLE_CREDENTIALS_JSON` as repository secrets instead of committing these files.
 
 SEC collection can optionally set `SEC_USER_AGENT` in the environment.
 
