@@ -1,5 +1,6 @@
 import os
 from collections import Counter
+from datetime import date, datetime
 from hashlib import sha256
 
 import gspread
@@ -73,6 +74,27 @@ SCOPES = [
     "https://www.googleapis.com/auth/drive",
 ]
 
+MONTHS = {
+    "jan": 1,
+    "ene": 1,
+    "feb": 2,
+    "mar": 3,
+    "apr": 4,
+    "abr": 4,
+    "may": 5,
+    "jun": 6,
+    "jul": 7,
+    "aug": 8,
+    "ago": 8,
+    "sep": 9,
+    "oct": 10,
+    "nov": 11,
+    "dec": 12,
+    "dic": 12,
+}
+
+DATE_WARNINGS = []
+
 
 def open_sheet():
     load_dotenv()
@@ -98,6 +120,32 @@ def make_signal_id(source, raw_key):
     return f"{source}_{digest}"
 
 
+def normalize_signal_date(value):
+    original_value = value
+    value = value.strip()
+    if not value:
+        return value
+
+    try:
+        return datetime.strptime(value, "%Y-%m-%d").date().isoformat()
+    except ValueError:
+        pass
+
+    parts = value.replace(",", " ").split()
+    if len(parts) == 3:
+        day_text, month_text, year_text = parts
+        month = MONTHS.get(month_text[:3].lower())
+        if month:
+            try:
+                return date(int(year_text), month, int(day_text)).isoformat()
+            except ValueError:
+                pass
+
+    print(f"WARNING: could not parse signal_date: {original_value}")
+    DATE_WARNINGS.append(original_value)
+    return original_value
+
+
 def build_signal(
     signal_date,
     signal_type,
@@ -112,7 +160,7 @@ def build_signal(
 ):
     return {
         "signal_id": make_signal_id(source, raw_key),
-        "signal_date": signal_date,
+        "signal_date": normalize_signal_date(signal_date),
         "signal_type": signal_type,
         "ticker": ticker,
         "entity_name": entity_name,
@@ -269,6 +317,7 @@ def print_summary(signals):
 
     print(f"Worksheet rebuilt: {OUTPUT_WORKSHEET_NAME}")
     print(f"Signals generated: {len(signals)}")
+    print(f"Date warnings: {len(DATE_WARNINGS)}")
     print("Count by signal_type:")
     for signal_type, count in sorted(counts.items()):
         print(f"- {signal_type}: {count}")
