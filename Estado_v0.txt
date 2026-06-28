@@ -330,6 +330,8 @@ GOOGLE_SHEETS_ID
 
 El workflow escribe esos secretos en credentials.json y .env dentro del runner, ejecuta collectors, loaders y scripts/rebuild_radar.py, y no commitea CSV generados.
 
+Capitol Trades puede devolver HTTP 429 cuando se ejecuta desde GitHub Actions. En ese caso el workflow registra un warning, omite solo el loader de Capitol Trades en esa ejecución, continúa con SEC Form 4 y USASpending, y reconstruye el radar usando las raw sheets existentes.
+
 ⸻
 
 Próximo objetivo

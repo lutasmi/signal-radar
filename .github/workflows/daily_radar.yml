@@ -33,7 +33,14 @@ jobs:
           printf 'GOOGLE_SHEETS_ID=%s\n' "$GOOGLE_SHEETS_ID" > .env
 
       - name: Collect Capitol Trades
+        id: collect_capitol_trades
+        continue-on-error: true
         run: python3 collectors/collect_capitol_trades.py --max-rows 120 --delay 0.5
+
+      - name: Warn when Capitol Trades is skipped
+        if: steps.collect_capitol_trades.outcome == 'failure'
+        run: |
+          echo "::warning::Capitol Trades collector failed, often due to HTTP 429 rate limiting from GitHub Actions. Skipping raw_capitol_trades load for this run and continuing with existing Google Sheets data."
 
       - name: Collect SEC Form 4
         run: python3 collectors/collect_sec_form4.py --feed-pages 6 --max-filings 150 --delay 0.05
@@ -42,6 +49,7 @@ jobs:
         run: python3 collectors/collect_usaspending.py
 
       - name: Load Capitol Trades
+        if: steps.collect_capitol_trades.outcome == 'success'
         run: python3 loaders/load_capitol_trades_csv_to_sheets.py
 
       - name: Load SEC Form 4

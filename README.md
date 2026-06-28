@@ -73,6 +73,8 @@ Daily automation is defined in `.github/workflows/daily_radar.yml`. It can be st
 
 The daily workflow writes those secrets into runner-local `credentials.json` and `.env`, runs the three approved collectors, loads CSV artifacts into raw Google Sheets tabs, then runs `python3 scripts/rebuild_radar.py`. Generated CSVs remain ignored by git and are not committed.
 
+Capitol Trades can return HTTP 429 rate limits from GitHub Actions. When that collector fails in the daily workflow, the workflow logs a warning, skips only the Capitol Trades loader for that run, continues with SEC Form 4 and USASpending, and rebuilds the derived radar from the raw Google Sheets data already available.
+
 ## Internal Architecture
 
 * `collectors/`: source-specific CSV collectors.
