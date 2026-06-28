@@ -94,3 +94,15 @@ Every task must end with one of:
 * `NEEDS_DECISION`: requires user approval before continuing.
 
 Do not continue beyond the assigned task.
+
+
+## Flujo de trabajo Git
+
+En este proyecto se trabaja directamente sobre la rama `main`.
+
+No crear ramas.
+No crear Pull Requests.
+No hacer commits.
+No hacer push.
+
+Modificar únicamente los archivos necesarios y dejar los cambios preparados para que el usuario los revise y decida cuándo hacer commit.
