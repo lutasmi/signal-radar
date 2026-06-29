@@ -25,13 +25,56 @@ def validate_local_review_queue(require_csv):
     clusters = build_cluster_signals_sheet.build_clusters(signals)
     correlations = build_correlation_signals_sheet.build_correlations(signals, clusters)
     priorities = build_priority_signals_sheet.build_priorities(clusters, correlations)
-    first = build_review_queue_sheet.build_review_queue(priorities)
-    second = build_review_queue_sheet.build_review_queue(priorities)
+    first = build_review_queue_sheet.build_review_queue(
+        priorities,
+        run_date="2026-01-10",
+    )
+    second = build_review_queue_sheet.build_review_queue(
+        priorities,
+        run_date="2026-01-10",
+    )
 
     if first != second:
         raise ValueError("review_queue: generation is not deterministic")
 
     build_review_queue_sheet.validate_review_queue(first, priorities)
+
+    previous_state = {
+        row["review_id"]: dict(row)
+        for row in first
+    }
+    previous_review_id = first[0]["review_id"] if first else ""
+    if previous_review_id:
+        previous_state[previous_review_id]["review_status"] = "WATCHING"
+        previous_state[previous_review_id]["review_note"] = "manual note preserved"
+
+    changed_rows = build_review_queue_sheet.build_review_queue(
+        priorities[1:],
+        previous_state,
+        run_date="2026-01-11",
+    )
+    build_review_queue_sheet.validate_review_queue(changed_rows, priorities[1:])
+
+    closed_rows = [
+        row
+        for row in changed_rows
+        if row["status"] == build_review_queue_sheet.STATUS_CLOSED
+    ]
+    if previous_review_id and not closed_rows:
+        raise ValueError("review_queue: disappeared priorities are not marked CLOSED")
+
+    preserved_closed_rows = [
+        row
+        for row in closed_rows
+        if row["review_id"] == previous_review_id
+    ]
+    if preserved_closed_rows:
+        closed_row = preserved_closed_rows[0]
+        if closed_row["review_status"] != "WATCHING":
+            raise ValueError("review_queue: manual review_status was not preserved")
+        if closed_row["review_note"] != "manual note preserved":
+            raise ValueError("review_queue: manual review_note was not preserved")
+
     print(f"OK review_queue: {len(first)} deterministic review rows")
     return first
 
@@ -47,13 +90,7 @@ def validate_google_sheets_review_queue():
     )
     expected = build_review_queue_sheet.build_review_queue(
         priorities,
-        {
-            row["review_id"]: {
-                column: build_review_queue_sheet.get_value(row, column)
-                for column in build_review_queue_sheet.PRESERVED_COLUMNS
-            }
-            for row in actual
-        },
+        {row["review_id"]: dict(row) for row in actual},
     )
 
     build_review_queue_sheet.validate_review_queue(expected, priorities)

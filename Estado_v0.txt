@@ -240,8 +240,9 @@ Estado:
 
 * scripts/build_review_queue_sheet.py existe.
 * La pestaña review_queue existe.
-* Entrega oportunidades priorizadas a una cola interna de revisión humana.
+* Entrega oportunidades priorizadas a una cola interna de revisión humana y seguimiento diario.
 * Conserva review_status y review_note existentes cuando se reconstruye.
+* Añade status NEW/ACTIVE/CLOSED, review_today, first_seen, last_seen y closed_date.
 * No introduce Telegram ni canales externos.
 * La generación es idempotente y fue validada contra Google Sheets real el 2026-06-28.
 * scripts/rebuild_radar.py reconstruye todas las hojas derivadas hasta review_queue.
@@ -255,6 +256,26 @@ scripts/rebuild_radar.py
 Pestaña Google Sheets:
 
 review_queue
+
+Campos de seguimiento diario en review_queue:
+
+status
+→ NEW, ACTIVE o CLOSED
+
+review_today
+→ YES para oportunidades nuevas o activas de prioridad HIGH
+
+first_seen
+→ primera fecha en que la oportunidad apareció en review_queue
+
+last_seen
+→ última fecha en que la oportunidad siguió presente en priority_signals
+
+closed_date
+→ fecha en que una oportunidad dejó de aparecer en priority_signals
+
+review_status y review_note
+→ campos manuales preservados entre reconstrucciones
 
 ⸻
 
@@ -336,7 +357,7 @@ Capitol Trades puede devolver HTTP 429 cuando se ejecuta desde GitHub Actions. E
 
 Próximo objetivo
 
-Observar estabilidad de la automatización diaria y endurecer validaciones operativas.
+Observar estabilidad del seguimiento diario y endurecer validaciones operativas.
 
 Antes de avanzar a Telegram o dashboard:
 

@@ -17,6 +17,7 @@ from scripts import (
 
 FIXTURE_CSV_DIR = Path("tests/fixtures")
 GENERATED_CSV_DIR = Path("data")
+VALIDATION_RUN_DATE = "2026-01-10"
 
 
 def print_step(name):
@@ -86,8 +87,14 @@ def validate_all(require_csv=True, csv_dir=FIXTURE_CSV_DIR):
     summary.append(("priority_signals", len(priorities)))
 
     print_step("review_queue")
-    review_rows = build_review_queue_sheet.build_review_queue(priorities)
-    second_review_rows = build_review_queue_sheet.build_review_queue(priorities)
+    review_rows = build_review_queue_sheet.build_review_queue(
+        priorities,
+        run_date=VALIDATION_RUN_DATE,
+    )
+    second_review_rows = build_review_queue_sheet.build_review_queue(
+        priorities,
+        run_date=VALIDATION_RUN_DATE,
+    )
     if review_rows != second_review_rows:
         raise ValueError("review_queue: generation is not deterministic")
     build_review_queue_sheet.validate_review_queue(review_rows, priorities)

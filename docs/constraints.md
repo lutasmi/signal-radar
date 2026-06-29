@@ -70,3 +70,5 @@ Do not redesign the architecture without an explicit product decision.
 Work directly on `main`. Do not create branches, commits, pull requests, or pushes unless explicitly requested.
 
 Before adding new functionality, keep the repository internally coherent, loaders idempotent, signal generation deterministic, cluster alerts explainable, correlations auditable, priorities simple, and review status preserved.
+
+The `review_queue` worksheet is the daily change tracker. It may preserve prior rows as `CLOSED`, but manual fields such as `review_status` and `review_note` must remain intact across rebuilds.

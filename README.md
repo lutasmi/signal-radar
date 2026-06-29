@@ -20,7 +20,7 @@ Local CSV files in `data/` are generated artifacts. They are useful for repeatab
 
 ## Current Phase
 
-The current baseline includes ingestion -> raw sheets -> signals plus intelligence layers in `cluster_signals`, `correlation_signals`, `priority_signals`, and `review_queue`. The radar identifies repeated ticker activity, repeated contract activity, simple explainable correlations, a small auditable priority list, and an internal review queue.
+The current baseline includes ingestion -> raw sheets -> signals plus intelligence layers in `cluster_signals`, `correlation_signals`, `priority_signals`, and `review_queue`. The radar identifies repeated ticker activity, repeated contract activity, simple explainable correlations, a small auditable priority list, and a daily review queue.
 
 ## Main Commands
 
@@ -75,6 +75,14 @@ The daily workflow writes those secrets into runner-local `credentials.json` and
 
 Capitol Trades can return HTTP 429 rate limits from GitHub Actions. When that collector fails in the daily workflow, the workflow logs a warning, skips only the Capitol Trades loader for that run, continues with SEC Form 4 and USASpending, and rebuilds the derived radar from the raw Google Sheets data already available.
 
+The `review_queue` worksheet is the morning change tracker. It keeps `review_status` and `review_note` as manual fields, and adds lifecycle fields:
+
+* `status`: `NEW`, `ACTIVE`, or `CLOSED`.
+* `review_today`: `YES` for new or high-priority active rows.
+* `first_seen`: first date the opportunity appeared in the queue.
+* `last_seen`: latest pipeline date the opportunity was still present.
+* `closed_date`: date an opportunity disappeared from current priorities.
+
 ## Internal Architecture
 
 * `collectors/`: source-specific CSV collectors.
@@ -82,7 +90,7 @@ Capitol Trades can return HTTP 429 rate limits from GitHub Actions. When that co
 * `radar/`: shared engine helpers for Sheets, rows, dates, stable IDs, and loader deduplication.
 * `scripts/build_*`: deterministic transformations for derived worksheets.
 * `scripts/validate_*`: local and Google Sheets validation.
-* `scripts/rebuild_radar.py`: single entry point for the complete derived radar.
+* `scripts/rebuild_radar.py`: single entry point for the complete derived radar and daily review lifecycle.
 * `scripts/validate_all.py`: single local validation command suitable for CI.
 * `tests/fixtures/`: tiny deterministic CSV fixtures for local-only validation.
 

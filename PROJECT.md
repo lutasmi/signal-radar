@@ -6,7 +6,7 @@ Signal Radar detects early market-relevant signals by combining public political
 
 ## Project purpose
 
-The project collects data from the current approved sources, stores normalized raw records in Google Sheets, rebuilds a deterministic `signals` sheet from those raw tabs, and derives simple intelligence alerts in `cluster_signals`, `correlation_signals`, `priority_signals`, and `review_queue`. Google Sheets is the source of truth.
+The project collects data from the current approved sources, stores normalized raw records in Google Sheets, rebuilds a deterministic `signals` sheet from those raw tabs, and derives simple intelligence alerts in `cluster_signals`, `correlation_signals`, `priority_signals`, and `review_queue`. The `review_queue` worksheet tracks daily lifecycle changes so a user can see what is new, active, closed, and worth reviewing today. Google Sheets is the source of truth.
 
 ## Problem being solved
 
@@ -49,7 +49,7 @@ CSV files are generated artifacts. They are not the source of project state.
 
 ## Guiding principles
 
-Prefer simple code, few dependencies, readable functions, shared helper modules, deterministic transforms, idempotent loaders, and validations that can run before touching external services.
+Prefer simple code, few dependencies, readable functions, shared helper modules, deterministic transforms, idempotent loaders, preserved manual review fields, and validations that can run before touching external services.
 
 ## Long-term roadmap
 
@@ -61,4 +61,4 @@ Later phases must not start until the current pipeline is stable.
 
 ## Definition of success
 
-The current baseline succeeds when each approved source can be collected, loaded idempotently into its raw Google Sheets tab, rebuilt into `signals` deterministically, summarized into explainable `cluster_signals`, connected through auditable `correlation_signals`, ordered into simple `priority_signals`, and delivered to an internal `review_queue` with no known pipeline errors. Later product phases should preserve that baseline.
+The current baseline succeeds when each approved source can be collected, loaded idempotently into its raw Google Sheets tab, rebuilt into `signals` deterministically, summarized into explainable `cluster_signals`, connected through auditable `correlation_signals`, ordered into simple `priority_signals`, and delivered to an internal `review_queue` that preserves manual notes while tracking `NEW`, `ACTIVE`, and `CLOSED` opportunities. Later product phases should preserve that baseline.

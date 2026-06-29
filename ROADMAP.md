@@ -1,6 +1,6 @@
 Signal Radar - Roadmap
 
-Estado actual: ingesta, signals, cluster_signals, correlation_signals, priority_signals y review_queue operativas como baseline validado.
+Estado actual: ingesta, signals, cluster_signals, correlation_signals, priority_signals y review_queue con seguimiento diario operativas como baseline validado.
 
 Fuente de verdad: Google Sheets.
 
@@ -27,7 +27,8 @@ Estado:
 * signal_date normalization está implementado.
 * Existe validación offline de CSV, idempotencia de loaders y generación determinística de signals.
 * El flujo collectors → CSV → raw sheets → signals fue validado contra Google Sheets real el 2026-06-28.
-* CI mínimo activo para validación local con fixtures; la automatización diaria de ingesta sigue fuera de alcance.
+* CI mínimo activo para validación local con fixtures.
+* Automatización diaria controlada activa en GitHub Actions.
 
 Fase actual
 ✔ Alertas internas priority_signals → review_queue
@@ -40,6 +41,7 @@ Objetivo:
 * Conectar clusters con señales de mercado relacionadas en correlation_signals.
 * Ordenar oportunidades con prioridad HIGH/MEDIUM/LOW y explicación auditable.
 * Entregar oportunidades a una cola interna de revisión humana dentro de Google Sheets.
+* Mostrar qué oportunidades son NEW, ACTIVE, CLOSED y cuáles merecen revisión hoy.
 * Mantener una arquitectura interna reusable con collectors, loaders, transformaciones, validaciones y pipeline separados.
 
 Fase 5
@@ -55,7 +57,10 @@ Fase 8
 ✔ alertas internas
 
 Fase 9
-□ dashboard
+✔ seguimiento diario en review_queue
 
 Fase 10
+□ dashboard
+
+Fase 11
 □ backtesting
