@@ -106,6 +106,28 @@ def validate_loader_idempotency(name, values, loader_module):
     if len(first_pass) != len(first_keys):
         raise ValueError(f"{name}: duplicate keys found inside CSV")
 
+    if not data_rows:
+        return
+
+    first_row = data_rows[0]
+    header_to_value = {
+        column: first_row[index] if index < len(first_row) else ""
+        for index, column in enumerate(header)
+    }
+
+    reordered_header = list(reversed(header))
+    reordered_row = [header_to_value[column] for column in reordered_header]
+    reordered_existing_keys = loader_module.build_existing_keys(
+        [reordered_header, reordered_row],
+        header,
+    )
+    if loader_module.filter_new_rows(header, [first_row], reordered_existing_keys):
+        raise ValueError(f"{name}: loader does not respect existing sheet header order")
+
+    headerless_existing_keys = loader_module.build_existing_keys([first_row], header)
+    if loader_module.filter_new_rows(header, [first_row], headerless_existing_keys):
+        raise ValueError(f"{name}: loader ignores first existing row without header")
+
 
 def validate_signals_are_deterministic(worksheets):
     sheet = FakeSheet(worksheets)
@@ -158,10 +180,9 @@ def validate_pipeline(require_csv, csv_dir=DEFAULT_CSV_DIR):
     ]
     if missing_for_signals:
         print(
-            "SKIP signals: missing CSV data for "
+            "WARN signals: missing CSV data for "
             + ", ".join(missing_for_signals)
         )
-        return loaded_sources, []
 
     signals = validate_signals_are_deterministic(worksheets)
     print(f"OK signals: {len(signals)} deterministic rows")

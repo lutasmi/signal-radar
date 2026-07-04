@@ -18,7 +18,6 @@ Fuente
 → correlation_signals
 → priority_signals
 → review_queue
-→ alertas externas futuras
 
 Google Sheets es la fuente de verdad.
 
@@ -319,7 +318,7 @@ Decisiones cerradas
 * SEC Form 4 = fuente principal insiders.
 * USASpending = fuente principal contratos.
 * Google Sheets = fuente de verdad.
-* Telegram = canal futuro de alertas, no iniciar todavía.
+* Alertas externas = fuera de alcance salvo decisión explícita.
 * No usar SQLite en V1.
 * No usar Playwright mientras Capitol Trades HTML funcione.
 * No añadir nuevas fuentes.
@@ -351,7 +350,7 @@ GOOGLE_SHEETS_ID
 
 El workflow escribe esos secretos en credentials.json y .env dentro del runner, ejecuta collectors, loaders y scripts/rebuild_radar.py, y no commitea CSV generados.
 
-Capitol Trades puede devolver HTTP 429 cuando se ejecuta desde GitHub Actions. En ese caso el workflow registra un warning, omite solo el loader de Capitol Trades en esa ejecución, continúa con SEC Form 4 y USASpending, y reconstruye el radar usando las raw sheets existentes.
+Las fuentes externas pueden fallar de forma transitoria. Capitol Trades puede devolver HTTP 429 cuando se ejecuta desde GitHub Actions, y SEC o USASpending pueden estar lentas o no disponibles. En ese caso el workflow registra un warning, omite solo el loader de la fuente fallida en esa ejecución y reconstruye el radar usando las raw sheets existentes.
 
 ⸻
 
@@ -359,8 +358,8 @@ Próximo objetivo
 
 Observar estabilidad del seguimiento diario y endurecer validaciones operativas.
 
-Antes de avanzar a Telegram o dashboard:
+Antes de avanzar a canales externos o dashboard:
 
 1. Mantener Google Sheets como fuente de verdad.
-2. No introducir Telegram ni nuevas fuentes sin decisión explícita.
+2. No introducir canales externos ni nuevas fuentes sin decisión explícita.
 3. Revisar fallos reales del workflow diario antes de añadir nuevas superficies de producto.

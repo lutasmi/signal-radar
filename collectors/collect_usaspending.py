@@ -1,5 +1,6 @@
 import argparse
 import csv
+import time
 from datetime import date, timedelta
 from pathlib import Path
 
@@ -10,6 +11,8 @@ API_URL = "https://api.usaspending.gov/api/v2/search/spending_by_award/"
 OUTPUT_FILE = Path("data/usaspending_latest.csv")
 DEFAULT_DAYS = 90
 DEFAULT_LIMIT = 100
+DEFAULT_ATTEMPTS = 3
+DEFAULT_RETRY_DELAY_SECONDS = 5
 
 FIELDNAMES = [
     "award_id",
@@ -74,6 +77,36 @@ def normalize_award(row):
     }
 
 
+def post_with_retries(
+    url,
+    payload,
+    attempts=DEFAULT_ATTEMPTS,
+    retry_delay=DEFAULT_RETRY_DELAY_SECONDS,
+):
+    last_error = None
+    for attempt in range(1, attempts + 1):
+        try:
+            response = requests.post(url, json=payload, timeout=30)
+            if response.ok:
+                return response
+            last_error = RuntimeError(
+                f"USASpending API error {response.status_code}: {response.text[:1000]}"
+            )
+        except requests.RequestException as exc:
+            last_error = exc
+
+        if attempt < attempts:
+            print(
+                f"USASpending request failed on attempt {attempt}/{attempts}: "
+                f"{last_error}. Retrying in {retry_delay}s."
+            )
+            time.sleep(retry_delay)
+
+    raise RuntimeError(
+        f"USASpending API request failed after {attempts} attempts: {last_error}"
+    )
+
+
 def fetch_usaspending_contracts(days=DEFAULT_DAYS, limit=DEFAULT_LIMIT):
     end_date = date.today()
     start_date = end_date - timedelta(days=days)
@@ -85,12 +118,7 @@ def fetch_usaspending_contracts(days=DEFAULT_DAYS, limit=DEFAULT_LIMIT):
         page=1,
     )
 
-    response = requests.post(API_URL, json=payload, timeout=30)
-    if not response.ok:
-        raise RuntimeError(
-            f"USASpending API error {response.status_code}: {response.text[:1000]}"
-        )
-
+    response = post_with_retries(API_URL, payload)
     results = response.json().get("results", [])
     return [normalize_award(row) for row in results]
 

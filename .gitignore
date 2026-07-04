@@ -1,6 +1,7 @@
 .env
 credentials.json
 __pycache__/
+.venv/
 *.pyc
 research/
 tmp_js/

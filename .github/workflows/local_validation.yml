@@ -20,11 +20,5 @@ jobs:
       - name: Install Python dependencies
         run: python3 -m pip install -r requirements.txt
 
-      - name: Compile Python modules
-        run: python3 -m compileall radar collectors loaders scripts
-
-      - name: Run fixture-backed validation
+      - name: Run local repository validation
         run: python3 scripts/validate_all.py
-
-      - name: Check patch whitespace
-        run: git diff --check

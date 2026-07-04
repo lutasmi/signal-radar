@@ -24,6 +24,8 @@ The current baseline includes ingestion -> raw sheets -> signals plus intelligen
 
 ## Main Commands
 
+Use Python 3.11, which is the runtime used by CI and GitHub Actions.
+
 Collectors write local CSV artifacts:
 
 ```bash
@@ -52,13 +54,15 @@ The complete derived radar can be rebuilt in order:
 python3 scripts/rebuild_radar.py
 ```
 
+If a raw source worksheet is missing or a source collection was skipped, the rebuild logs a warning and continues with the raw worksheets that are available.
+
 Run all safe local validations without touching Google Sheets:
 
 ```bash
 python3 scripts/validate_all.py
 ```
 
-By default this command uses tracked CSV fixtures in `tests/fixtures/`, so it can run in a clean checkout without generated data, credentials, internet, or Google Sheets access. To validate the current ignored CSV artifacts in `data/`, run:
+By default this command uses tracked CSV fixtures in `tests/fixtures/`, so it can run in a clean checkout without generated data, credentials, internet, or Google Sheets access. It compiles Python modules, checks patch whitespace, and validates loader idempotency, deterministic derived layers, missing-source tolerance, and `review_queue` lifecycle preservation. To validate the current ignored CSV artifacts in `data/`, run:
 
 ```bash
 python3 scripts/validate_all.py --generated-csv
@@ -73,7 +77,7 @@ Daily automation is defined in `.github/workflows/daily_radar.yml`. It can be st
 
 The daily workflow writes those secrets into runner-local `credentials.json` and `.env`, runs the three approved collectors, loads CSV artifacts into raw Google Sheets tabs, then runs `python3 scripts/rebuild_radar.py`. Generated CSVs remain ignored by git and are not committed.
 
-Capitol Trades can return HTTP 429 rate limits from GitHub Actions. When that collector fails in the daily workflow, the workflow logs a warning, skips only the Capitol Trades loader for that run, continues with SEC Form 4 and USASpending, and rebuilds the derived radar from the raw Google Sheets data already available.
+External sources can fail transiently. Capitol Trades can return HTTP 429 rate limits from GitHub Actions, and the SEC or USASpending endpoints can be unavailable or slow. When a collector fails in the daily workflow, the workflow logs a warning, skips only that source's loader for the run, and rebuilds the derived radar from the raw Google Sheets data already available.
 
 The `review_queue` worksheet is the morning change tracker. It keeps `review_status` and `review_note` as manual fields, and adds lifecycle fields:
 

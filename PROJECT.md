@@ -10,7 +10,7 @@ The project collects data from the current approved sources, stores normalized r
 
 ## Problem being solved
 
-Useful signals are scattered across independent public sources. Signal Radar keeps those sources in one repeatable pipeline so future phases can correlate events without relying on local files as state.
+Useful signals are scattered across independent public sources. Signal Radar keeps those sources in one repeatable pipeline and presents the morning work queue directly in Google Sheets without relying on local files as state.
 
 ## Non-goals
 
@@ -51,13 +51,11 @@ CSV files are generated artifacts. They are not the source of project state.
 
 Prefer simple code, few dependencies, readable functions, shared helper modules, deterministic transforms, idempotent loaders, preserved manual review fields, and validations that can run before touching external services.
 
-## Long-term roadmap
+## Roadmap
 
-1. Add external alert delivery.
-2. Add dashboard.
-3. Add backtesting.
+V1 is the Google Sheets operating product: approved sources are collected, raw history is preserved, deterministic derived tabs are rebuilt, and `review_queue` shows what is new, active, closed, and worth reviewing today.
 
-Later phases must not start until the current pipeline is stable.
+Near-term work should stay inside that product boundary: observe real workflow runs, harden validations from real failures, and simplify implementation details without changing the Sheets-first architecture. External alert delivery, dashboards, backtesting, new sources, databases, and complex scoring remain out of scope unless explicitly approved.
 
 ## Definition of success
 

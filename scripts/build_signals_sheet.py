@@ -1,5 +1,7 @@
 from collections import Counter
 
+import gspread
+
 from radar.dates import normalize_date
 from radar.records import get_value, stable_id
 from radar.sheets import open_sheet, replace_worksheet
@@ -183,7 +185,12 @@ def normalize_usaspending(row):
 
 
 def read_records(sheet, worksheet_name):
-    worksheet = sheet.worksheet(worksheet_name)
+    try:
+        worksheet = sheet.worksheet(worksheet_name)
+    except (gspread.exceptions.WorksheetNotFound, KeyError):
+        print(f"WARNING: missing raw worksheet skipped: {worksheet_name}")
+        return []
+
     values = worksheet.get_all_values()
     if not values:
         return []

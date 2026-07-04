@@ -1,4 +1,6 @@
 import argparse
+import compileall
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -12,22 +14,160 @@ from scripts import (
     build_correlation_signals_sheet,
     build_priority_signals_sheet,
     build_review_queue_sheet,
+    build_signals_sheet,
     validate_pipeline,
 )
 
 FIXTURE_CSV_DIR = Path("tests/fixtures")
 GENERATED_CSV_DIR = Path("data")
 VALIDATION_RUN_DATE = "2026-01-10"
+PYTHON_MODULE_DIRS = ["radar", "collectors", "loaders", "scripts"]
 
 
 def print_step(name):
     print(f"\n== {name} ==")
 
 
+def validate_python_modules():
+    for module_dir in PYTHON_MODULE_DIRS:
+        path = PROJECT_ROOT / module_dir
+        if not compileall.compile_dir(str(path), quiet=1, maxlevels=20):
+            raise ValueError(f"Python compile failed: {module_dir}")
+    print(f"OK python_modules: {', '.join(PYTHON_MODULE_DIRS)}")
+    return len(PYTHON_MODULE_DIRS)
+
+
+def validate_patch_whitespace():
+    result = subprocess.run(
+        ["git", "diff", "--check"],
+        cwd=PROJECT_ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        output = (result.stdout + result.stderr).strip()
+        raise ValueError(f"git diff --check failed:\n{output}")
+    print("OK patch_whitespace: git diff --check")
+    return 1
+
+
+def load_fixture_worksheets(csv_dir):
+    worksheets = {}
+    for name, csv_filename, _, _ in validate_pipeline.CSV_SPECS:
+        csv_file = csv_dir / csv_filename
+        if csv_file.exists():
+            worksheets[validate_pipeline.WORKSHEET_BY_SOURCE[name]] = (
+                validate_pipeline.read_csv_values(csv_file)
+            )
+    return worksheets
+
+
+def validate_missing_source_tolerance(csv_dir):
+    worksheets = load_fixture_worksheets(csv_dir)
+    if len(worksheets) < 2:
+        print("SKIP missing source tolerance: fewer than 2 CSV fixtures available")
+        return 0
+
+    partial_worksheets = dict(worksheets)
+    skipped_worksheet = build_signals_sheet.RAW_CAPITOL_TRADES
+    partial_worksheets.pop(skipped_worksheet, None)
+
+    sheet = validate_pipeline.FakeSheet(partial_worksheets)
+    build_signals_sheet.DATE_WARNINGS.clear()
+    first = build_signals_sheet.build_signals(sheet)
+    build_signals_sheet.DATE_WARNINGS.clear()
+    second = build_signals_sheet.build_signals(sheet)
+
+    if first != second:
+        raise ValueError("signals: partial-source generation is not deterministic")
+
+    signal_ids = [signal["signal_id"] for signal in first]
+    if len(signal_ids) != len(set(signal_ids)):
+        raise ValueError("signals: duplicate signal_id values found with partial sources")
+
+    if not first:
+        raise ValueError("signals: partial sources produced no rows")
+
+    print(
+        "OK missing source tolerance: "
+        f"skipped {skipped_worksheet}, generated {len(first)} signals"
+    )
+    return len(first)
+
+
+def validate_review_lifecycle(priorities, review_rows):
+    if len(priorities) < 2 or not review_rows:
+        print("SKIP review_queue lifecycle: insufficient priority rows")
+        return 0
+
+    previous_state = {row["review_id"]: dict(row) for row in review_rows}
+    preserved_priority = priorities[0]
+    preserved_review_id = build_review_queue_sheet.make_review_id(preserved_priority)
+    previous_state[preserved_review_id]["review_status"] = "WATCHING"
+    previous_state[preserved_review_id]["review_note"] = "manual note preserved"
+
+    active_rows = build_review_queue_sheet.build_review_queue(
+        priorities,
+        previous_state,
+        run_date="2026-01-11",
+    )
+    build_review_queue_sheet.validate_review_queue(active_rows, priorities)
+
+    active_preserved_rows = [
+        row for row in active_rows if row["review_id"] == preserved_review_id
+    ]
+    if not active_preserved_rows:
+        raise ValueError("review_queue: active row disappeared during rebuild")
+
+    active_row = active_preserved_rows[0]
+    if active_row["status"] != build_review_queue_sheet.STATUS_ACTIVE:
+        raise ValueError("review_queue: existing priority was not marked ACTIVE")
+    if active_row["last_seen"] != "2026-01-11":
+        raise ValueError("review_queue: last_seen was not updated for active row")
+    if active_row["review_status"] != "WATCHING":
+        raise ValueError("review_queue: active review_status was not preserved")
+    if active_row["review_note"] != "manual note preserved":
+        raise ValueError("review_queue: active review_note was not preserved")
+
+    next_rows = build_review_queue_sheet.build_review_queue(
+        priorities[1:],
+        previous_state,
+        run_date="2026-01-11",
+    )
+    build_review_queue_sheet.validate_review_queue(next_rows, priorities[1:])
+
+    preserved_rows = [
+        row for row in next_rows if row["review_id"] == preserved_review_id
+    ]
+    if not preserved_rows:
+        raise ValueError("review_queue: disappeared row was not retained")
+
+    preserved_row = preserved_rows[0]
+    if preserved_row["status"] != build_review_queue_sheet.STATUS_CLOSED:
+        raise ValueError("review_queue: disappeared priority was not marked CLOSED")
+    if preserved_row["closed_date"] != "2026-01-11":
+        raise ValueError("review_queue: closed_date was not set to rebuild date")
+    if preserved_row["review_status"] != "WATCHING":
+        raise ValueError("review_queue: manual review_status was not preserved")
+    if preserved_row["review_note"] != "manual note preserved":
+        raise ValueError("review_queue: manual review_note was not preserved")
+    original_row = previous_state[preserved_review_id]
+    if preserved_row["first_seen"] != original_row["first_seen"]:
+        raise ValueError("review_queue: first_seen history was not preserved")
+
+    print("OK review_queue lifecycle: ACTIVE/CLOSED states and manual fields preserved")
+    return len(next_rows)
+
+
 def validate_all(require_csv=True, csv_dir=FIXTURE_CSV_DIR):
     started_at = time.monotonic()
     summary = []
     csv_dir = validate_pipeline.resolve_csv_dir(csv_dir)
+
+    print_step("repository")
+    summary.append(("python_modules", validate_python_modules()))
+    summary.append(("patch_whitespace", validate_patch_whitespace()))
 
     print_step("pipeline")
     print(f"CSV directory: {csv_dir}")
@@ -37,6 +177,9 @@ def validate_all(require_csv=True, csv_dir=FIXTURE_CSV_DIR):
     )
     summary.append(("sources", len(loaded_sources)))
     summary.append(("signals", len(signals)))
+
+    if signals:
+        summary.append(("partial_source_signals", validate_missing_source_tolerance(csv_dir)))
 
     if not signals:
         print("\nValidation skipped derived layers because no local signals were available.")
@@ -100,6 +243,9 @@ def validate_all(require_csv=True, csv_dir=FIXTURE_CSV_DIR):
     build_review_queue_sheet.validate_review_queue(review_rows, priorities)
     print(f"OK review_queue: {len(review_rows)} deterministic review rows")
     summary.append(("review_queue", len(review_rows)))
+
+    lifecycle_rows = validate_review_lifecycle(priorities, review_rows)
+    summary.append(("review_queue_lifecycle", lifecycle_rows))
 
     elapsed = time.monotonic() - started_at
     print("\n== summary ==")

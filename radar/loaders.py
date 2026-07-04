@@ -34,13 +34,19 @@ def build_key(header, row, key_columns, normalize_value=None):
 
 
 def build_existing_keys(values, csv_header, key_columns, normalize_value=None):
-    if len(values) <= 1:
+    if not values:
         return set()
 
-    header = values[0] if values[0] == csv_header else csv_header
+    if set(key_columns).issubset(set(values[0])):
+        header = values[0]
+        data_rows = values[1:]
+    else:
+        header = csv_header
+        data_rows = values
+
     return {
         build_key(header, row, key_columns, normalize_value=normalize_value)
-        for row in values[1:]
+        for row in data_rows
     }
 
 

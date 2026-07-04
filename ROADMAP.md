@@ -1,6 +1,6 @@
 Signal Radar - Roadmap
 
-Estado actual: ingesta, signals, cluster_signals, correlation_signals, priority_signals y review_queue con seguimiento diario operativas como baseline validado.
+Estado actual: V1 operativo como radar personal en Google Sheets. La ingesta, las raw sheets, `signals`, `cluster_signals`, `correlation_signals`, `priority_signals` y `review_queue` forman el producto actual.
 
 Fuente de verdad: Google Sheets.
 
@@ -30,8 +30,8 @@ Estado:
 * CI mínimo activo para validación local con fixtures.
 * Automatización diaria controlada activa en GitHub Actions.
 
-Fase actual
-✔ Alertas internas priority_signals → review_queue
+V1
+✔ Radar diario en Google Sheets
 
 Objetivo:
 
@@ -59,8 +59,13 @@ Fase 8
 Fase 9
 ✔ seguimiento diario en review_queue
 
-Fase 10
-□ dashboard
+Siguientes mejoras permitidas dentro de V1
+□ Observar ejecuciones reales del workflow diario y corregir fallos operativos.
+□ Endurecer validaciones locales cuando aparezcan nuevos casos reales.
+□ Simplificar duplicación interna sin cambiar la arquitectura.
 
-Fase 11
+Fuera de alcance salvo decisión explícita
+□ dashboard
+□ alertas externas
 □ backtesting
+□ nuevas fuentes
