@@ -24,7 +24,7 @@ The current baseline includes ingestion -> raw sheets -> signals plus intelligen
 
 ## Main Commands
 
-Use Python 3.11, which is the runtime used by CI and GitHub Actions.
+Use Python 3.11, which is the runtime used by CI and GitHub Actions. The main local entrypoints can re-exec through the project `.venv` when `python3` points to a different interpreter without the required dependencies.
 
 Collectors write local CSV artifacts:
 

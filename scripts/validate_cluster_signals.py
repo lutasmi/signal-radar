@@ -6,6 +6,10 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
+from radar.runtime import ensure_project_runtime
+
+ensure_project_runtime(["gspread", "dotenv", "google.oauth2.service_account"])
+
 from radar.records import rows_to_dicts
 from scripts import build_cluster_signals_sheet, validate_pipeline
 

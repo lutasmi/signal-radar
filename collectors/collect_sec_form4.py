@@ -2,10 +2,19 @@ import argparse
 import csv
 import os
 import re
+import sys
 import time
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from urllib.parse import urljoin
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from radar.runtime import ensure_project_runtime
+
+ensure_project_runtime(["requests"])
 
 import requests
 

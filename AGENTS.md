@@ -83,6 +83,29 @@ Nunca entregues código sin ejecutar las comprobaciones posibles.
 
 Si existe un script de validación debes utilizarlo.
 
+Una tarea no termina cuando el código ha sido modificado.
+
+Una tarea termina únicamente cuando el comportamiento completo end-to-end ha sido validado.
+
+Si GitHub Actions forma parte de la funcionalidad o del cambio, la tarea incluye:
+
+* esperar la ejecución del workflow cuando exista una ejecución disponible
+* analizar fallos
+* implementar correcciones
+* repetir hasta que el workflow pase
+
+No declares DONE antes de que la funcionalidad opere end-to-end.
+
+Eres responsable del repositorio.
+
+El Product Owner no debe necesitar inspeccionar logs de GitHub Actions para saber si la implementación funciona.
+
+Si un workflow falla, investiga, corrige e itera hasta que pase o hasta que exista un bloqueo externo real.
+
+Entorno local reproducible
+
+The technical owner is responsible not only for the repository but also for the reproducible local development environment. If the project cannot be executed because of missing dependencies or virtual environment configuration, resolve it autonomously whenever possible.
+
 Si una validación falla:
 
 * identifica la causa
