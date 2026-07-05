@@ -21,6 +21,7 @@ from scripts import (
     build_signals_sheet,
     send_capture_summary,
     send_telegram_alerts,
+    validate_candidate_sources,
     validate_pipeline,
 )
 from radar.scoring import load_scoring_config
@@ -185,6 +186,13 @@ def validate_all(require_csv=True, csv_dir=FIXTURE_CSV_DIR):
     send_capture_summary.validate_capture_summary_logic()
     print("OK capture_summary_logic: message generation and failure reporting")
     summary.append(("capture_summary_logic", 1))
+    candidate_summary = validate_candidate_sources.validate_candidate_sources()
+    summary.append(("candidate_sources", len(candidate_summary)))
+    if csv_dir == validate_pipeline.resolve_csv_dir(GENERATED_CSV_DIR):
+        generated_candidate_summary = (
+            validate_candidate_sources.validate_generated_candidate_sources(csv_dir)
+        )
+        summary.append(("generated_candidate_sources", len(generated_candidate_summary)))
 
     print_step("pipeline")
     scoring_config = load_scoring_config()
