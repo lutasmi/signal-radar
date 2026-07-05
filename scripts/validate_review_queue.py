@@ -32,10 +32,12 @@ def validate_local_review_queue(require_csv):
     first = build_review_queue_sheet.build_review_queue(
         priorities,
         run_date="2026-01-10",
+        signals=signals,
     )
     second = build_review_queue_sheet.build_review_queue(
         priorities,
         run_date="2026-01-10",
+        signals=signals,
     )
 
     if first != second:
@@ -56,6 +58,7 @@ def validate_local_review_queue(require_csv):
         priorities[1:],
         previous_state,
         run_date="2026-01-11",
+        signals=signals,
     )
     build_review_queue_sheet.validate_review_queue(changed_rows, priorities[1:])
 
@@ -95,6 +98,10 @@ def validate_google_sheets_review_queue():
     expected = build_review_queue_sheet.build_review_queue(
         priorities,
         {row["review_id"]: dict(row) for row in actual},
+        signals=build_review_queue_sheet.read_records(
+            sheet,
+            build_review_queue_sheet.SIGNALS_WORKSHEET_NAME,
+        ),
     )
 
     build_review_queue_sheet.validate_review_queue(expected, priorities)

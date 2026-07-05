@@ -76,3 +76,9 @@ jobs:
 
       - name: Rebuild radar
         run: python3 scripts/rebuild_radar.py
+
+      - name: Send Telegram alerts
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python3 scripts/send_telegram_alerts.py

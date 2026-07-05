@@ -19,6 +19,7 @@ Derived tab:
 * `correlation_signals`
 * `priority_signals`
 * `review_queue`
+* `telegram_alert_log`
 
 Local CSV files are generated artifacts only.
 
@@ -40,6 +41,8 @@ Raw Google Sheets tabs -> `signals`
 
 `priority_signals` -> `review_queue`
 
+`review_queue` -> `telegram_alert_log` -> Telegram alerts
+
 ## Internal Layout
 
 * `collectors/` fetch approved source data.
@@ -48,6 +51,7 @@ Raw Google Sheets tabs -> `signals`
 * `scripts/build_*` contains deterministic transformations.
 * `scripts/validate_*` contains validation entry points.
 * `scripts/rebuild_radar.py` runs the complete derived radar.
+* `scripts/send_telegram_alerts.py` sends deduplicated Telegram alerts from `review_queue`.
 
 ## Restrictions
 
@@ -59,7 +63,6 @@ Do not introduce:
 * Redis
 * microservices
 * Playwright
-* Telegram
 * complex scoring
 * new external sources
 

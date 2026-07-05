@@ -14,6 +14,7 @@ signals       -> cluster_signals
 cluster_signals + signals -> correlation_signals
 cluster_signals + correlation_signals -> priority_signals
 priority_signals -> review_queue
+review_queue -> telegram_alert_log -> Telegram
 ```
 
 Local CSV files in `data/` are generated artifacts. They are useful for repeatable loads and offline validation, but they are not project state.
@@ -74,8 +75,10 @@ Daily automation is defined in `.github/workflows/daily_radar.yml`. It can be st
 
 * `GOOGLE_CREDENTIALS_JSON`: full Google service account JSON.
 * `GOOGLE_SHEETS_ID`: target spreadsheet ID.
+* `TELEGRAM_BOT_TOKEN`: Telegram bot token.
+* `TELEGRAM_CHAT_ID`: destination chat ID.
 
-The daily workflow writes those secrets into runner-local `credentials.json` and `.env`, runs the three approved collectors, loads CSV artifacts into raw Google Sheets tabs, then runs `python3 scripts/rebuild_radar.py`. Generated CSVs remain ignored by git and are not committed.
+The daily workflow writes Google secrets into runner-local `credentials.json` and `.env`, runs the three approved collectors, loads CSV artifacts into raw Google Sheets tabs, runs `python3 scripts/rebuild_radar.py`, then sends Telegram alerts. Generated CSVs remain ignored by git and are not committed.
 
 External sources can fail transiently. Capitol Trades can return HTTP 429 rate limits from GitHub Actions, and the SEC or USASpending endpoints can be unavailable or slow. When a collector fails in the daily workflow, the workflow logs a warning, skips only that source's loader for the run, and rebuilds the derived radar from the raw Google Sheets data already available.
 
@@ -86,6 +89,22 @@ The `review_queue` worksheet is the morning change tracker. It keeps `review_sta
 * `first_seen`: first date the opportunity appeared in the queue.
 * `last_seen`: latest pipeline date the opportunity was still present.
 * `closed_date`: date an opportunity disappeared from current priorities.
+* `score`: deterministic configurable score.
+* `score_band`: alert band such as `HIGH`, `MEDIUM`, or `LOW`.
+* `score_reason`: auditable explanation of score components.
+
+Scoring weights live in `config/scoring.json`, so weights can change without editing Python. The default config covers priority level, source diversity, cross-source/correlation types, signal types, repeated activity, recency, `review_today`, and lifecycle status.
+
+Telegram alerts are generated from `review_queue`:
+
+```bash
+python3 scripts/send_telegram_alerts.py --dry-run
+python3 scripts/send_telegram_alerts.py
+```
+
+Default alert rule: `status = NEW`, `review_today = YES`, or `score_band = HIGH`. Sent alerts are appended to `telegram_alert_log`; reruns skip alerts whose `alert_id` is already logged. Dry-run prints candidate messages without sending Telegram messages or writing alert history.
+
+Morning workflow: check Telegram for concise high-priority radar alerts, then open Google Sheets for deeper review and manual notes.
 
 ## Internal Architecture
 
@@ -95,6 +114,7 @@ The `review_queue` worksheet is the morning change tracker. It keeps `review_sta
 * `scripts/build_*`: deterministic transformations for derived worksheets.
 * `scripts/validate_*`: local and Google Sheets validation.
 * `scripts/rebuild_radar.py`: single entry point for the complete derived radar and daily review lifecycle.
+* `scripts/send_telegram_alerts.py`: sends deduplicated Telegram alerts from `review_queue`.
 * `scripts/validate_all.py`: single local validation command suitable for CI.
 * `tests/fixtures/`: tiny deterministic CSV fixtures for local-only validation.
 
@@ -147,8 +167,10 @@ Google Sheets operations require:
 
 In GitHub Actions, set `GOOGLE_SHEETS_ID` and `GOOGLE_CREDENTIALS_JSON` as repository secrets instead of committing these files.
 
+Telegram operations require `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` in `.env` locally or as GitHub repository secrets.
+
 SEC collection can optionally set `SEC_USER_AGENT` in the environment.
 
 ## Restrictions
 
-Do not add databases, Docker, Redis, microservices, Telegram, Playwright, new data sources, or complex scoring unless explicitly requested. Future phases are tracked in `ROADMAP.md`.
+Do not add databases, Docker, Redis, microservices, Playwright, new data sources, new alert channels, or complex scoring unless explicitly requested. Telegram is the approved V1 alert channel. Future phases are tracked in `ROADMAP.md`.

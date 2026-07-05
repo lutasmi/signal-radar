@@ -19,8 +19,10 @@ from scripts import (
     build_priority_signals_sheet,
     build_review_queue_sheet,
     build_signals_sheet,
+    send_telegram_alerts,
     validate_pipeline,
 )
+from radar.scoring import load_scoring_config
 
 FIXTURE_CSV_DIR = Path("tests/fixtures")
 GENERATED_CSV_DIR = Path("data")
@@ -100,7 +102,7 @@ def validate_missing_source_tolerance(csv_dir):
     return len(first)
 
 
-def validate_review_lifecycle(priorities, review_rows):
+def validate_review_lifecycle(priorities, review_rows, signals, scoring_config):
     if len(priorities) < 2 or not review_rows:
         print("SKIP review_queue lifecycle: insufficient priority rows")
         return 0
@@ -115,6 +117,8 @@ def validate_review_lifecycle(priorities, review_rows):
         priorities,
         previous_state,
         run_date="2026-01-11",
+        signals=signals,
+        scoring_config=scoring_config,
     )
     build_review_queue_sheet.validate_review_queue(active_rows, priorities)
 
@@ -138,6 +142,8 @@ def validate_review_lifecycle(priorities, review_rows):
         priorities[1:],
         previous_state,
         run_date="2026-01-11",
+        signals=signals,
+        scoring_config=scoring_config,
     )
     build_review_queue_sheet.validate_review_queue(next_rows, priorities[1:])
 
@@ -172,8 +178,14 @@ def validate_all(require_csv=True, csv_dir=FIXTURE_CSV_DIR):
     print_step("repository")
     summary.append(("python_modules", validate_python_modules()))
     summary.append(("patch_whitespace", validate_patch_whitespace()))
+    send_telegram_alerts.validate_dry_run_logic()
+    print("OK telegram_dry_run_logic: message generation and deduplication")
+    summary.append(("telegram_dry_run_logic", 1))
 
     print_step("pipeline")
+    scoring_config = load_scoring_config()
+    print("OK scoring_config: config/scoring.json")
+    summary.append(("scoring_config", 1))
     print(f"CSV directory: {csv_dir}")
     loaded_sources, signals = validate_pipeline.validate_pipeline(
         require_csv=require_csv,
@@ -237,10 +249,14 @@ def validate_all(require_csv=True, csv_dir=FIXTURE_CSV_DIR):
     review_rows = build_review_queue_sheet.build_review_queue(
         priorities,
         run_date=VALIDATION_RUN_DATE,
+        signals=signals,
+        scoring_config=scoring_config,
     )
     second_review_rows = build_review_queue_sheet.build_review_queue(
         priorities,
         run_date=VALIDATION_RUN_DATE,
+        signals=signals,
+        scoring_config=scoring_config,
     )
     if review_rows != second_review_rows:
         raise ValueError("review_queue: generation is not deterministic")
@@ -248,7 +264,12 @@ def validate_all(require_csv=True, csv_dir=FIXTURE_CSV_DIR):
     print(f"OK review_queue: {len(review_rows)} deterministic review rows")
     summary.append(("review_queue", len(review_rows)))
 
-    lifecycle_rows = validate_review_lifecycle(priorities, review_rows)
+    lifecycle_rows = validate_review_lifecycle(
+        priorities,
+        review_rows,
+        signals,
+        scoring_config,
+    )
     summary.append(("review_queue_lifecycle", lifecycle_rows))
 
     elapsed = time.monotonic() - started_at

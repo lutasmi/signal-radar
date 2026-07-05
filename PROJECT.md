@@ -6,7 +6,7 @@ Signal Radar detects early market-relevant signals by combining public political
 
 ## Project purpose
 
-The project collects data from the current approved sources, stores normalized raw records in Google Sheets, rebuilds a deterministic `signals` sheet from those raw tabs, and derives simple intelligence alerts in `cluster_signals`, `correlation_signals`, `priority_signals`, and `review_queue`. The `review_queue` worksheet tracks daily lifecycle changes so a user can see what is new, active, closed, and worth reviewing today. Google Sheets is the source of truth.
+The project collects data from the current approved sources, stores normalized raw records in Google Sheets, rebuilds a deterministic `signals` sheet from those raw tabs, and derives simple intelligence alerts in `cluster_signals`, `correlation_signals`, `priority_signals`, and `review_queue`. The `review_queue` worksheet tracks daily lifecycle changes, configurable scoring, and Telegram alert eligibility so a user can see what is new, active, closed, and worth reviewing today. Google Sheets is the source of truth.
 
 ## Problem being solved
 
@@ -14,7 +14,7 @@ Useful signals are scattered across independent public sources. Signal Radar kee
 
 ## Non-goals
 
-Current non-goals are Telegram alerts, complex scoring, dashboards, backtesting, new external sources, databases, Docker, Redis, microservices, and browser automation such as Playwright.
+Current non-goals are complex ML scoring, dashboards, backtesting, new external sources, databases, Docker, Redis, microservices, and browser automation such as Playwright.
 
 ## Current architecture
 
@@ -34,6 +34,8 @@ USASpending -> CSV -> `raw_usaspending`
 
 `priority_signals` -> `review_queue`
 
+`review_queue` -> `telegram_alert_log` -> Telegram
+
 CSV files are generated artifacts. They are not the source of project state.
 
 ## Internal architecture
@@ -43,7 +45,9 @@ CSV files are generated artifacts. They are not the source of project state.
 * `radar/` contains reusable engine helpers for Google Sheets access, row handling, date parsing, stable IDs, and loader deduplication.
 * `scripts/build_*` modules transform Google Sheets data into derived worksheets.
 * `scripts/validate_*` modules verify deterministic generation and worksheet consistency.
+* `config/scoring.json` contains simple auditable scoring weights.
 * `scripts/rebuild_radar.py` is the single deterministic execution entry point for the complete derived radar.
+* `scripts/send_telegram_alerts.py` sends deduplicated Telegram alerts from `review_queue`.
 * `scripts/validate_all.py` is the single local validation command for safe pre-Sheets checks.
 * `tests/fixtures/` contains tiny deterministic CSV fixtures so local validation works in clean checkouts.
 
@@ -53,10 +57,10 @@ Prefer simple code, few dependencies, readable functions, shared helper modules,
 
 ## Roadmap
 
-V1 is the Google Sheets operating product: approved sources are collected, raw history is preserved, deterministic derived tabs are rebuilt, and `review_queue` shows what is new, active, closed, and worth reviewing today.
+V1 is the Google Sheets plus Telegram operating product: approved sources are collected, raw history is preserved, deterministic derived tabs are rebuilt, `review_queue` shows what is new, active, closed, scored, and worth reviewing today, and Telegram receives concise deduplicated alerts.
 
-Near-term work should stay inside that product boundary: observe real workflow runs, harden validations from real failures, and simplify implementation details without changing the Sheets-first architecture. External alert delivery, dashboards, backtesting, new sources, databases, and complex scoring remain out of scope unless explicitly approved.
+Near-term work should stay inside that product boundary: observe real workflow runs, harden validations from real failures, and simplify implementation details without changing the Sheets-first architecture. Dashboards, backtesting, new sources, databases, and complex scoring remain out of scope unless explicitly approved.
 
 ## Definition of success
 
-The current baseline succeeds when each approved source can be collected, loaded idempotently into its raw Google Sheets tab, rebuilt into `signals` deterministically, summarized into explainable `cluster_signals`, connected through auditable `correlation_signals`, ordered into simple `priority_signals`, and delivered to an internal `review_queue` that preserves manual notes while tracking `NEW`, `ACTIVE`, and `CLOSED` opportunities. Later product phases should preserve that baseline.
+The current baseline succeeds when each approved source can be collected, loaded idempotently into its raw Google Sheets tab, rebuilt into `signals` deterministically, summarized into explainable `cluster_signals`, connected through auditable `correlation_signals`, ordered into simple `priority_signals`, scored in `review_queue`, and delivered as deduplicated Telegram alerts while preserving manual notes and tracking `NEW`, `ACTIVE`, and `CLOSED` opportunities.

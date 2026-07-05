@@ -18,6 +18,8 @@ Fuente
 → correlation_signals
 → priority_signals
 → review_queue
+→ telegram_alert_log
+→ Telegram
 
 Google Sheets es la fuente de verdad.
 
@@ -43,11 +45,17 @@ scripts/validate_*
 scripts/rebuild_radar.py
 → punto único de ejecución del radar derivado completo
 
+scripts/send_telegram_alerts.py
+→ envío de alertas Telegram deduplicadas desde review_queue
+
 scripts/validate_all.py
 → punto único de validación local sin escribir en Google Sheets
 
 tests/fixtures/
 → CSV mínimos y determinísticos para validación reproducible sin credenciales ni internet
+
+config/scoring.json
+→ pesos configurables y auditables para score, score_band y score_reason
 
 ⸻
 
@@ -241,8 +249,8 @@ Estado:
 * La pestaña review_queue existe.
 * Entrega oportunidades priorizadas a una cola interna de revisión humana y seguimiento diario.
 * Conserva review_status y review_note existentes cuando se reconstruye.
-* Añade status NEW/ACTIVE/CLOSED, review_today, first_seen, last_seen y closed_date.
-* No introduce Telegram ni canales externos.
+* Añade status NEW/ACTIVE/CLOSED, review_today, first_seen, last_seen, closed_date, score, score_band y score_reason.
+* Envía alertas Telegram deduplicadas usando telegram_alert_log.
 * La generación es idempotente y fue validada contra Google Sheets real el 2026-06-28.
 * scripts/rebuild_radar.py reconstruye todas las hojas derivadas hasta review_queue.
 * La lógica común de Sheets, fechas, filas, IDs y deduplicación vive en radar/.
@@ -308,6 +316,10 @@ correlation_signals
 priority_signals
 → review_queue
 
+review_queue
+→ telegram_alert_log
+→ Telegram
+
 Google Sheets es la fuente de verdad.
 
 ⸻
@@ -318,7 +330,7 @@ Decisiones cerradas
 * SEC Form 4 = fuente principal insiders.
 * USASpending = fuente principal contratos.
 * Google Sheets = fuente de verdad.
-* Alertas externas = fuera de alcance salvo decisión explícita.
+* Telegram = canal operativo de alertas V1.
 * No usar SQLite en V1.
 * No usar Playwright mientras Capitol Trades HTML funcione.
 * No añadir nuevas fuentes.
@@ -343,12 +355,14 @@ raw_usaspending
 
 El workflow .github/workflows/local_validation.yml ejecuta validación local con fixtures en cada push y pull request.
 
-El workflow .github/workflows/daily_radar.yml ejecuta ingesta diaria controlada y también puede lanzarse manualmente desde GitHub Actions. Requiere los secretos:
+El workflow .github/workflows/daily_radar.yml ejecuta ingesta diaria controlada, rebuild del radar y alertas Telegram. También puede lanzarse manualmente desde GitHub Actions. Requiere los secretos:
 
 GOOGLE_CREDENTIALS_JSON
 GOOGLE_SHEETS_ID
+TELEGRAM_BOT_TOKEN
+TELEGRAM_CHAT_ID
 
-El workflow escribe esos secretos en credentials.json y .env dentro del runner, ejecuta collectors, loaders y scripts/rebuild_radar.py, y no commitea CSV generados.
+El workflow escribe los secretos de Google en credentials.json y .env dentro del runner, ejecuta collectors, loaders, scripts/rebuild_radar.py y scripts/send_telegram_alerts.py, y no commitea CSV generados.
 
 Las fuentes externas pueden fallar de forma transitoria. Capitol Trades puede devolver HTTP 429 cuando se ejecuta desde GitHub Actions, y SEC o USASpending pueden estar lentas o no disponibles. En ese caso el workflow registra un warning, omite solo el loader de la fuente fallida en esa ejecución y reconstruye el radar usando las raw sheets existentes.
 
@@ -356,10 +370,10 @@ Las fuentes externas pueden fallar de forma transitoria. Capitol Trades puede de
 
 Próximo objetivo
 
-Observar estabilidad del seguimiento diario y endurecer validaciones operativas.
+Observar estabilidad del seguimiento diario, scoring y alertas Telegram; endurecer validaciones operativas.
 
-Antes de avanzar a canales externos o dashboard:
+Antes de avanzar a nuevos canales externos o dashboard:
 
 1. Mantener Google Sheets como fuente de verdad.
-2. No introducir canales externos ni nuevas fuentes sin decisión explícita.
+2. No introducir nuevos canales externos ni nuevas fuentes sin decisión explícita.
 3. Revisar fallos reales del workflow diario antes de añadir nuevas superficies de producto.

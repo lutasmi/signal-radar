@@ -1,6 +1,6 @@
 Signal Radar - Roadmap
 
-Estado actual: V1 operativo como radar personal en Google Sheets. La ingesta, las raw sheets, `signals`, `cluster_signals`, `correlation_signals`, `priority_signals` y `review_queue` forman el producto actual.
+Estado actual: V1 operativo como radar personal en Google Sheets con alertas Telegram. La ingesta, las raw sheets, `signals`, `cluster_signals`, `correlation_signals`, `priority_signals`, `review_queue`, scoring configurable y `telegram_alert_log` forman el producto actual.
 
 Fuente de verdad: Google Sheets.
 
@@ -41,6 +41,8 @@ Objetivo:
 * Conectar clusters con señales de mercado relacionadas en correlation_signals.
 * Ordenar oportunidades con prioridad HIGH/MEDIUM/LOW y explicación auditable.
 * Entregar oportunidades a una cola interna de revisión humana dentro de Google Sheets.
+* Puntuar oportunidades con pesos configurables en `config/scoring.json`.
+* Enviar alertas Telegram deduplicadas para oportunidades relevantes.
 * Mostrar qué oportunidades son NEW, ACTIVE, CLOSED y cuáles merecen revisión hoy.
 * Mantener una arquitectura interna reusable con collectors, loaders, transformaciones, validaciones y pipeline separados.
 
@@ -54,7 +56,7 @@ Fase 7
 ✔ scoring simple
 
 Fase 8
-✔ alertas internas
+✔ alertas internas y Telegram
 
 Fase 9
 ✔ seguimiento diario en review_queue
@@ -66,6 +68,5 @@ Siguientes mejoras permitidas dentro de V1
 
 Fuera de alcance salvo decisión explícita
 □ dashboard
-□ alertas externas
 □ backtesting
 □ nuevas fuentes

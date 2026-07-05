@@ -52,6 +52,7 @@ def rebuild_radar():
     review_rows = build_review_queue_sheet.build_review_queue(
         priorities,
         build_review_queue_sheet.existing_review_state(sheet),
+        signals=signals,
     )
     build_review_queue_sheet.validate_review_queue(review_rows, priorities)
     build_review_queue_sheet.write_review_queue(sheet, review_rows)

@@ -15,11 +15,13 @@ import gspread
 
 from radar.dates import parse_date
 from radar.records import get_value, rows_to_dicts, stable_id
+from radar.scoring import build_signal_lookup, load_scoring_config, score_review_row
 from radar.sheets import open_sheet, read_records, replace_worksheet
 from scripts import build_priority_signals_sheet
 
 
 PRIORITIES_WORKSHEET_NAME = "priority_signals"
+SIGNALS_WORKSHEET_NAME = "signals"
 OUTPUT_WORKSHEET_NAME = "review_queue"
 
 REVIEW_QUEUE_HEADER = [
@@ -31,6 +33,9 @@ REVIEW_QUEUE_HEADER = [
     "closed_date",
     "review_status",
     "review_note",
+    "score",
+    "score_band",
+    "score_reason",
     "priority_level",
     "ticker",
     "entity_name",
@@ -159,10 +164,23 @@ def build_closed_review_row(saved_state, run_date):
     row["last_seen"] = get_value(saved_state, "last_seen") or row["first_seen"]
     row["closed_date"] = get_value(saved_state, "closed_date") or run_date
     row["review_status"] = get_value(saved_state, "review_status") or DEFAULT_REVIEW_STATUS
+    row["score"] = get_value(saved_state, "score") or "0"
+    row["score_band"] = get_value(saved_state, "score_band") or "LOW"
+    row["score_reason"] = get_value(saved_state, "score_reason") or "Closed item retained for history."
     return row
 
 
-def build_review_queue(priorities, existing_state=None, run_date=None):
+def apply_scores(rows, signals, run_date, scoring_config=None):
+    scoring_config = scoring_config or load_scoring_config()
+    signal_lookup = build_signal_lookup(signals)
+    for row in rows:
+        if get_value(row, "status") == STATUS_CLOSED and get_value(row, "score"):
+            continue
+        row.update(score_review_row(row, signal_lookup, run_date, scoring_config))
+    return rows
+
+
+def build_review_queue(priorities, existing_state=None, run_date=None, signals=None, scoring_config=None):
     existing_state = existing_state or {}
     run_date = run_date or today_iso()
     rows = []
@@ -182,12 +200,15 @@ def build_review_queue(priorities, existing_state=None, run_date=None):
             continue
         rows.append(build_closed_review_row(saved_state, run_date))
 
+    rows = apply_scores(rows, signals or [], run_date, scoring_config=scoring_config)
+
     return sorted(
         rows,
         key=lambda row: (
             STATUS_ORDER.get(row["status"], 99),
             row["review_today"] != "YES",
             build_priority_signals_sheet.PRIORITY_ORDER.get(row["priority_level"], 99),
+            -int(row["score"] or "0"),
             row["last_date"],
             row["ticker"],
             row["entity_name"],
@@ -236,6 +257,13 @@ def validate_review_queue(rows, priorities):
         if not get_value(row, "summary") or not get_value(row, "priority_reason"):
             raise ValueError(f"Review row has missing explanation: {row}")
 
+        score = get_value(row, "score")
+        if not score.isdigit():
+            raise ValueError(f"Review row has invalid score: {row}")
+
+        if not get_value(row, "score_band") or not get_value(row, "score_reason"):
+            raise ValueError(f"Review row has missing score explanation: {row}")
+
         last_date = parse_date(get_value(row, "last_date"))
         if last_date is None:
             raise ValueError(f"Review row has invalid last_date: {row}")
@@ -266,7 +294,8 @@ def print_summary(rows):
 def main():
     sheet = open_sheet()
     priorities = read_records(sheet, PRIORITIES_WORKSHEET_NAME)
-    rows = build_review_queue(priorities, existing_review_state(sheet))
+    signals = read_records(sheet, SIGNALS_WORKSHEET_NAME)
+    rows = build_review_queue(priorities, existing_review_state(sheet), signals=signals)
     validate_review_queue(rows, priorities)
     write_review_queue(sheet, rows)
     print_summary(rows)

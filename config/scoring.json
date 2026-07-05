@@ -1,0 +1,55 @@
+{
+  "priority_level": {
+    "HIGH": 50,
+    "MEDIUM": 30,
+    "LOW": 10
+  },
+  "source_diversity_per_extra_source": 6,
+  "opportunity_type": {
+    "CROSS_SOURCE": 18,
+    "CONTRACT_MARKET_ENTITY": 20,
+    "TICKER_CLUSTER_RELATED_SIGNAL": 12,
+    "TICKER_ACTIVITY": 10,
+    "REPEATED_CONTRACTS": 8
+  },
+  "signal_type": {
+    "PTR_BUY": 8,
+    "PTR_SELL": 2,
+    "INSIDER_BUY": 10,
+    "CONTRACT": 6
+  },
+  "recency": [
+    {
+      "max_days": 7,
+      "weight": 14
+    },
+    {
+      "max_days": 30,
+      "weight": 8
+    },
+    {
+      "max_days": 90,
+      "weight": 3
+    }
+  ],
+  "review_today": 15,
+  "status": {
+    "NEW": 20,
+    "ACTIVE": 5,
+    "CLOSED": 0
+  },
+  "bands": [
+    {
+      "name": "HIGH",
+      "min_score": 85
+    },
+    {
+      "name": "MEDIUM",
+      "min_score": 45
+    },
+    {
+      "name": "LOW",
+      "min_score": 0
+    }
+  ]
+}
