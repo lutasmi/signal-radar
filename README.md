@@ -35,6 +35,25 @@ python3 collectors/collect_sec_form4.py
 python3 collectors/collect_usaspending.py
 ```
 
+Candidate-source collectors write auditable raw responses under `data/raw/<source>/`
+and normalized CSVs under `data/processed/<source>/`. They are intentionally not
+loaded into Google Sheets yet:
+
+```bash
+python3 collectors/collect_sam_gov.py
+python3 collectors/collect_congress_gov.py --use-demo-key
+python3 collectors/collect_federal_register.py
+python3 collectors/collect_lda_gov.py --filing-year 2026
+python3 collectors/collect_sec_edgar_additional.py
+python3 collectors/collect_fec.py --use-demo-key --period 2026
+python3 collectors/collect_grants_gov.py --keyword energy
+python3 collectors/collect_uspto.py
+```
+
+SAM.gov and USPTO require real API keys for live extraction. Congress.gov and
+OpenFEC support `DEMO_KEY` for small validation samples, but production use
+should set `CONGRESS_GOV_API_KEY` and `FEC_API_KEY`.
+
 The USASpending collector combines recent Department of Defense awards with a
 second pass over the largest recent awards, deduplicated by `award_id`.
 
