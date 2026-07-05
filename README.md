@@ -98,9 +98,12 @@ Scoring weights live in `config/scoring.json`, so weights can change without edi
 Telegram alerts are generated from `review_queue`:
 
 ```bash
+python3 scripts/send_telegram_alerts.py --test
 python3 scripts/send_telegram_alerts.py --dry-run
 python3 scripts/send_telegram_alerts.py
 ```
+
+`--test` sends a fixed Telegram integration test message without reading or writing Google Sheets.
 
 Default alert rule: `status = NEW`, `review_today = YES`, or `score_band = HIGH`. Sent alerts are appended to `telegram_alert_log`; reruns skip alerts whose `alert_id` is already logged. Dry-run prints candidate messages without sending Telegram messages or writing alert history.
 

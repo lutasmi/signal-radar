@@ -9,14 +9,15 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from radar.runtime import ensure_project_runtime
 
-ensure_project_runtime(["dotenv", "gspread", "requests"])
+ensure_project_runtime(
+    ["dotenv", "requests"]
+    + ([] if "--test" in sys.argv else ["gspread"])
+)
 
 import requests
 from dotenv import load_dotenv
-import gspread
 
 from radar.records import get_value, rows_to_dicts, stable_id
-from radar.sheets import open_or_create_worksheet, open_sheet
 
 
 REVIEW_QUEUE_WORKSHEET_NAME = "review_queue"
@@ -33,6 +34,32 @@ ALERT_LOG_HEADER = [
 
 def now_iso():
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+
+
+def build_test_message():
+    return "\n".join(
+        [
+            "✅ Signal Radar",
+            "",
+            "Telegram integration OK",
+            "",
+            f"UTC: {now_iso()}",
+            "",
+            "Version: v1",
+            "",
+            "This is a test message.",
+        ]
+    )
+
+
+def telegram_credentials():
+    import os
+
+    token = os.getenv("TELEGRAM_BOT_TOKEN", "")
+    chat_id = os.getenv("TELEGRAM_CHAT_ID", "")
+    if not token or not chat_id:
+        raise ValueError("TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID are required")
+    return token, chat_id
 
 
 def make_alert_id(row):
@@ -64,6 +91,8 @@ def build_message(row):
 
 
 def alert_log_records(sheet):
+    import gspread
+
     try:
         worksheet = sheet.worksheet(ALERT_LOG_WORKSHEET_NAME)
     except gspread.exceptions.WorksheetNotFound:
@@ -121,6 +150,8 @@ def send_telegram_message(token, chat_id, message):
 
 
 def append_alert_log(sheet, records):
+    from radar.sheets import open_or_create_worksheet
+
     if not records:
         return
     worksheet = open_or_create_worksheet(
@@ -153,6 +184,8 @@ def alert_log_record(alert_id, row, message, sent_at):
 
 def send_alerts(dry_run=False):
     load_dotenv()
+    from radar.sheets import open_sheet
+
     sheet = open_sheet()
     review_rows = rows_to_dicts(
         sheet.worksheet(REVIEW_QUEUE_WORKSHEET_NAME).get_all_values()
@@ -168,12 +201,7 @@ def send_alerts(dry_run=False):
         print("Dry-run complete: no Telegram messages sent and no alert log written.")
         return alerts
 
-    import os
-
-    token = os.getenv("TELEGRAM_BOT_TOKEN", "")
-    chat_id = os.getenv("TELEGRAM_CHAT_ID", "")
-    if not token or not chat_id:
-        raise ValueError("TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID are required")
+    token, chat_id = telegram_credentials()
 
     sent_at = now_iso()
     log_records = []
@@ -184,6 +212,15 @@ def send_alerts(dry_run=False):
     append_alert_log(sheet, log_records)
     print(f"Telegram alerts sent: {len(log_records)}")
     return alerts
+
+
+def send_test_message():
+    load_dotenv()
+    token, chat_id = telegram_credentials()
+    message = build_test_message()
+    send_telegram_message(token, chat_id, message)
+    print("Telegram test message sent")
+    return message
 
 
 def validate_dry_run_logic():
@@ -239,11 +276,19 @@ def validate_dry_run_logic():
 def parse_args():
     parser = argparse.ArgumentParser(description="Send Telegram alerts for review_queue.")
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument(
+        "--test",
+        action="store_true",
+        help="Send a Telegram integration test message without reading Google Sheets.",
+    )
     return parser.parse_args()
 
 
 def main():
     args = parse_args()
+    if args.test:
+        send_test_message()
+        return
     send_alerts(dry_run=args.dry_run)
 
 

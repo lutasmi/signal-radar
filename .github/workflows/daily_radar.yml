@@ -2,6 +2,15 @@ name: Daily radar
 
 on:
   workflow_dispatch:
+    inputs:
+      telegram_test:
+        description: "Send only a Telegram test message"
+        required: false
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
   schedule:
     - cron: "15 7 * * *"
 
@@ -21,7 +30,15 @@ jobs:
       - name: Install Python dependencies
         run: python3 -m pip install -r requirements.txt
 
+      - name: Send Telegram test message
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.telegram_test == 'true' }}
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python3 scripts/send_telegram_alerts.py --test
+
       - name: Write Google credentials
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.telegram_test != 'true' }}
         env:
           GOOGLE_CREDENTIALS_JSON: ${{ secrets.GOOGLE_CREDENTIALS_JSON }}
           GOOGLE_SHEETS_ID: ${{ secrets.GOOGLE_SHEETS_ID }}
@@ -33,51 +50,56 @@ jobs:
           printf 'GOOGLE_SHEETS_ID=%s\n' "$GOOGLE_SHEETS_ID" > .env
 
       - name: Collect Capitol Trades
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.telegram_test != 'true' }}
         id: collect_capitol_trades
         continue-on-error: true
         run: python3 collectors/collect_capitol_trades.py --max-rows 120 --delay 0.5
 
       - name: Warn when Capitol Trades is skipped
-        if: steps.collect_capitol_trades.outcome == 'failure'
+        if: ${{ (github.event_name != 'workflow_dispatch' || inputs.telegram_test != 'true') && steps.collect_capitol_trades.outcome == 'failure' }}
         run: |
           echo "::warning::Capitol Trades collector failed, often due to HTTP 429 rate limiting from GitHub Actions. Skipping raw_capitol_trades load for this run and continuing with existing Google Sheets data."
 
       - name: Collect SEC Form 4
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.telegram_test != 'true' }}
         id: collect_sec_form4
         continue-on-error: true
         run: python3 collectors/collect_sec_form4.py --feed-pages 6 --max-filings 150 --delay 0.05
 
       - name: Warn when SEC Form 4 is skipped
-        if: steps.collect_sec_form4.outcome == 'failure'
+        if: ${{ (github.event_name != 'workflow_dispatch' || inputs.telegram_test != 'true') && steps.collect_sec_form4.outcome == 'failure' }}
         run: |
           echo "::warning::SEC Form 4 collector failed. Skipping raw_sec_form4 load for this run and continuing with existing Google Sheets data."
 
       - name: Collect USASpending
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.telegram_test != 'true' }}
         id: collect_usaspending
         continue-on-error: true
         run: python3 collectors/collect_usaspending.py
 
       - name: Warn when USASpending is skipped
-        if: steps.collect_usaspending.outcome == 'failure'
+        if: ${{ (github.event_name != 'workflow_dispatch' || inputs.telegram_test != 'true') && steps.collect_usaspending.outcome == 'failure' }}
         run: |
           echo "::warning::USASpending collector failed. Skipping raw_usaspending load for this run and continuing with existing Google Sheets data."
 
       - name: Load Capitol Trades
-        if: steps.collect_capitol_trades.outcome == 'success'
+        if: ${{ (github.event_name != 'workflow_dispatch' || inputs.telegram_test != 'true') && steps.collect_capitol_trades.outcome == 'success' }}
         run: python3 loaders/load_capitol_trades_csv_to_sheets.py
 
       - name: Load SEC Form 4
-        if: steps.collect_sec_form4.outcome == 'success'
+        if: ${{ (github.event_name != 'workflow_dispatch' || inputs.telegram_test != 'true') && steps.collect_sec_form4.outcome == 'success' }}
         run: python3 loaders/load_sec_form4_csv_to_sheets.py
 
       - name: Load USASpending
-        if: steps.collect_usaspending.outcome == 'success'
+        if: ${{ (github.event_name != 'workflow_dispatch' || inputs.telegram_test != 'true') && steps.collect_usaspending.outcome == 'success' }}
         run: python3 loaders/load_usaspending_csv_to_sheets.py
 
       - name: Rebuild radar
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.telegram_test != 'true' }}
         run: python3 scripts/rebuild_radar.py
 
       - name: Send Telegram alerts
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.telegram_test != 'true' }}
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
