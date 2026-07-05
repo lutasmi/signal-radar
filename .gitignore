@@ -1,4 +1,5 @@
 .env
+.env.local
 credentials.json
 __pycache__/
 .venv/
@@ -8,3 +9,5 @@ tmp_js/
 *.db
 .DS_Store
 data/*.csv
+data/raw/
+data/processed/
