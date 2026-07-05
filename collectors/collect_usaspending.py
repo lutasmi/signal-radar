@@ -20,8 +20,11 @@ API_URL = "https://api.usaspending.gov/api/v2/search/spending_by_award/"
 OUTPUT_FILE = Path("data/usaspending_latest.csv")
 DEFAULT_DAYS = 90
 DEFAULT_LIMIT = 100
+DEFAULT_MAX_PAGES = 5
+DEFAULT_TOP_AMOUNT_PAGES = 2
 DEFAULT_ATTEMPTS = 3
 DEFAULT_RETRY_DELAY_SECONDS = 5
+MAX_API_LIMIT = 100
 
 FIELDNAMES = [
     "award_id",
@@ -41,7 +44,7 @@ def award_source_url(row):
     return API_URL
 
 
-def build_payload(start_date, end_date, limit, page):
+def build_payload(start_date, end_date, limit, page, sort="Start Date", order="desc"):
     return {
         "filters": {
             "time_period": [
@@ -67,8 +70,8 @@ def build_payload(start_date, end_date, limit, page):
             "Start Date",
             "Description",
         ],
-        "sort": "Start Date",
-        "order": "desc",
+        "sort": sort,
+        "order": order,
         "limit": limit,
         "page": page,
     }
@@ -116,20 +119,109 @@ def post_with_retries(
     )
 
 
-def fetch_usaspending_contracts(days=DEFAULT_DAYS, limit=DEFAULT_LIMIT):
+def merge_unique_contracts(contract_groups):
+    contracts = []
+    seen_award_ids = set()
+
+    for group in contract_groups:
+        for contract in group:
+            award_id = contract["award_id"]
+            if award_id and award_id in seen_award_ids:
+                continue
+            if award_id:
+                seen_award_ids.add(award_id)
+            contracts.append(contract)
+
+    return contracts
+
+
+def fetch_contract_pages(
+    start_date,
+    end_date,
+    limit=DEFAULT_LIMIT,
+    max_pages=DEFAULT_MAX_PAGES,
+    sort="Start Date",
+    order="desc",
+    label="USASpending",
+):
+    contracts = []
+    seen_award_ids = set()
+
+    for page in range(1, max_pages + 1):
+        payload = build_payload(
+            start_date=start_date,
+            end_date=end_date,
+            limit=limit,
+            page=page,
+            sort=sort,
+            order=order,
+        )
+
+        response = post_with_retries(API_URL, payload)
+        data = response.json()
+        results = data.get("results", [])
+        if not results:
+            break
+
+        new_rows = 0
+        for row in results:
+            contract = normalize_award(row)
+            award_id = contract["award_id"]
+            if award_id and award_id in seen_award_ids:
+                continue
+            if award_id:
+                seen_award_ids.add(award_id)
+            contracts.append(contract)
+            new_rows += 1
+
+        print(
+            f"{label} page {page}: "
+            f"{len(results)} rows, {new_rows} new awards"
+        )
+
+        page_metadata = data.get("page_metadata") or {}
+        if page_metadata.get("hasNext") is False:
+            break
+        if len(results) < limit:
+            break
+
+    return contracts
+
+
+def fetch_usaspending_contracts(
+    days=DEFAULT_DAYS,
+    limit=DEFAULT_LIMIT,
+    max_pages=DEFAULT_MAX_PAGES,
+    top_amount_pages=DEFAULT_TOP_AMOUNT_PAGES,
+):
     end_date = date.today()
     start_date = end_date - timedelta(days=days)
+    start_text = start_date.isoformat()
+    end_text = end_date.isoformat()
 
-    payload = build_payload(
-        start_date=start_date.isoformat(),
-        end_date=end_date.isoformat(),
+    recent_contracts = fetch_contract_pages(
+        start_date=start_text,
+        end_date=end_text,
         limit=limit,
-        page=1,
+        max_pages=max_pages,
+        sort="Start Date",
+        order="desc",
+        label="USASpending recent",
     )
 
-    response = post_with_retries(API_URL, payload)
-    results = response.json().get("results", [])
-    return [normalize_award(row) for row in results]
+    amount_contracts = []
+    if top_amount_pages:
+        amount_contracts = fetch_contract_pages(
+            start_date=start_text,
+            end_date=end_text,
+            limit=limit,
+            max_pages=top_amount_pages,
+            sort="Award Amount",
+            order="desc",
+            label="USASpending top amount",
+        )
+
+    return merge_unique_contracts([recent_contracts, amount_contracts])
 
 
 def write_csv(contracts, output_file=OUTPUT_FILE):
@@ -163,6 +255,8 @@ def parse_args():
     )
     parser.add_argument("--days", type=int, default=DEFAULT_DAYS)
     parser.add_argument("--limit", type=int, default=DEFAULT_LIMIT)
+    parser.add_argument("--max-pages", type=int, default=DEFAULT_MAX_PAGES)
+    parser.add_argument("--top-amount-pages", type=int, default=DEFAULT_TOP_AMOUNT_PAGES)
     parser.add_argument("--output", type=Path, default=OUTPUT_FILE)
     return parser.parse_args()
 
@@ -174,12 +268,25 @@ if __name__ == "__main__":
         raise ValueError("--days must be greater than 0")
     if args.limit <= 0:
         raise ValueError("--limit must be greater than 0")
+    if args.limit > MAX_API_LIMIT:
+        raise ValueError(f"--limit cannot be greater than {MAX_API_LIMIT}")
+    if args.max_pages <= 0:
+        raise ValueError("--max-pages must be greater than 0")
+    if args.top_amount_pages < 0:
+        raise ValueError("--top-amount-pages cannot be negative")
 
-    contracts = fetch_usaspending_contracts(days=args.days, limit=args.limit)
+    contracts = fetch_usaspending_contracts(
+        days=args.days,
+        limit=args.limit,
+        max_pages=args.max_pages,
+        top_amount_pages=args.top_amount_pages,
+    )
     write_csv(contracts, args.output)
 
     print(f"Endpoint: {API_URL}")
     print(f"Recent window: last {args.days} days")
+    print(f"Recent pages: {args.max_pages}")
+    print(f"Top amount pages: {args.top_amount_pages}")
     print(f"Contracts extracted: {len(contracts)}")
     print(f"CSV generated: {args.output}")
     print_sample_rows(contracts)

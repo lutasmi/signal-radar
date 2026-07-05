@@ -14,9 +14,10 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from radar.runtime import ensure_project_runtime
 
-ensure_project_runtime(["requests"])
+ensure_project_runtime(["dotenv", "requests"])
 
 import requests
+from dotenv import load_dotenv
 
 
 CURRENT_FILINGS_URL = "https://www.sec.gov/cgi-bin/browse-edgar"
@@ -26,10 +27,11 @@ DEFAULT_FEED_PAGES = 3
 DEFAULT_MAX_FILINGS = 50
 DEFAULT_DELAY_SECONDS = 0.2
 
+load_dotenv()
+
 SEC_USER_AGENT = os.getenv(
-    "SEC_USER_AGENT",
-    "SignalRadar/0.1 contact@example.com",
-)
+    "SEC_USER_AGENT"
+) or "SignalRadar/1.0 contact@example.com"
 
 HEADERS = {
     "User-Agent": SEC_USER_AGENT,
@@ -184,6 +186,12 @@ def parse_ownership_document(xml_text, filing_date, source_url):
         transaction_code = child_text(transaction, "transactionCoding/transactionCode")
         if transaction_code != "P":
             continue
+        acquired_disposed = child_text(
+            transaction,
+            "transactionAmounts/transactionAcquiredDisposedCode/value",
+        )
+        if acquired_disposed != "A":
+            continue
 
         shares = child_text(transaction, "transactionAmounts/transactionShares/value")
         price = child_text(transaction, "transactionAmounts/transactionPricePerShare/value")
@@ -201,10 +209,7 @@ def parse_ownership_document(xml_text, filing_date, source_url):
                 "insider_title": "; ".join(owner_titles),
                 "transaction_date": child_text(transaction, "transactionDate/value"),
                 "transaction_code": transaction_code,
-                "acquired_disposed": child_text(
-                    transaction,
-                    "transactionAmounts/transactionAcquiredDisposedCode/value",
-                ),
+                "acquired_disposed": acquired_disposed,
                 "shares": shares,
                 "price": price,
                 "estimated_value": format_number(estimated_value),

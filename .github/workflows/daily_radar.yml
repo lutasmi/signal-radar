@@ -64,6 +64,8 @@ jobs:
         if: ${{ github.event_name != 'workflow_dispatch' || inputs.telegram_test != 'true' }}
         id: collect_sec_form4
         continue-on-error: true
+        env:
+          SEC_USER_AGENT: ${{ secrets.SEC_USER_AGENT }}
         run: python3 collectors/collect_sec_form4.py --feed-pages 6 --max-filings 150 --delay 0.05
 
       - name: Warn when SEC Form 4 is skipped
@@ -82,6 +84,16 @@ jobs:
         run: |
           echo "::warning::USASpending collector failed. Skipping raw_usaspending load for this run and continuing with existing Google Sheets data."
 
+      - name: Send capture summary
+        if: ${{ always() && (github.event_name != 'workflow_dispatch' || inputs.telegram_test != 'true') }}
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          CAPITOL_TRADES_OUTCOME: ${{ steps.collect_capitol_trades.outcome }}
+          SEC_FORM4_OUTCOME: ${{ steps.collect_sec_form4.outcome }}
+          USASPENDING_OUTCOME: ${{ steps.collect_usaspending.outcome }}
+        run: python3 scripts/send_capture_summary.py
+
       - name: Load Capitol Trades
         if: ${{ (github.event_name != 'workflow_dispatch' || inputs.telegram_test != 'true') && steps.collect_capitol_trades.outcome == 'success' }}
         run: python3 loaders/load_capitol_trades_csv_to_sheets.py
@@ -94,9 +106,21 @@ jobs:
         if: ${{ (github.event_name != 'workflow_dispatch' || inputs.telegram_test != 'true') && steps.collect_usaspending.outcome == 'success' }}
         run: python3 loaders/load_usaspending_csv_to_sheets.py
 
+      - name: Validate raw data quality
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.telegram_test != 'true' }}
+        run: python3 scripts/validate_raw_quality.py
+
+      - name: Raw data metrics
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.telegram_test != 'true' }}
+        run: python3 scripts/collect_daily_metrics.py
+
       - name: Rebuild radar
         if: ${{ github.event_name != 'workflow_dispatch' || inputs.telegram_test != 'true' }}
         run: python3 scripts/rebuild_radar.py
+
+      - name: Radar metrics
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.telegram_test != 'true' }}
+        run: python3 scripts/collect_daily_metrics.py
 
       - name: Send Telegram alerts
         if: ${{ github.event_name != 'workflow_dispatch' || inputs.telegram_test != 'true' }}

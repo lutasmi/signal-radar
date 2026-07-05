@@ -19,6 +19,7 @@ from scripts import (
     build_priority_signals_sheet,
     build_review_queue_sheet,
     build_signals_sheet,
+    send_capture_summary,
     send_telegram_alerts,
     validate_pipeline,
 )
@@ -181,6 +182,9 @@ def validate_all(require_csv=True, csv_dir=FIXTURE_CSV_DIR):
     send_telegram_alerts.validate_dry_run_logic()
     print("OK telegram_dry_run_logic: message generation and deduplication")
     summary.append(("telegram_dry_run_logic", 1))
+    send_capture_summary.validate_capture_summary_logic()
+    print("OK capture_summary_logic: message generation and failure reporting")
+    summary.append(("capture_summary_logic", 1))
 
     print_step("pipeline")
     scoring_config = load_scoring_config()

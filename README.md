@@ -35,6 +35,9 @@ python3 collectors/collect_sec_form4.py
 python3 collectors/collect_usaspending.py
 ```
 
+The USASpending collector combines recent Department of Defense awards with a
+second pass over the largest recent awards, deduplicated by `award_id`.
+
 Loaders append new rows to Google Sheets raw tabs:
 
 ```bash
@@ -69,6 +72,21 @@ By default this command uses tracked CSV fixtures in `tests/fixtures/`, so it ca
 python3 scripts/validate_all.py --generated-csv
 ```
 
+Validate live raw Google Sheets source quality without writing:
+
+```bash
+python3 scripts/validate_raw_quality.py
+python3 scripts/collect_daily_metrics.py
+```
+
+Remove exact duplicate rows from raw Google Sheets tabs only after reviewing the
+dry-run output:
+
+```bash
+python3 scripts/dedupe_raw_sheets.py
+python3 scripts/dedupe_raw_sheets.py --apply
+```
+
 GitHub Actions runs the same fixture-backed local validation on every push and pull request through `.github/workflows/local_validation.yml`. The workflow does not run collectors, loaders, Google Sheets writes, or credential-dependent checks.
 
 Daily automation is defined in `.github/workflows/daily_radar.yml`. It can be started manually from GitHub Actions using the `Daily radar` workflow, and it also runs once per day on schedule. Required repository secrets:
@@ -79,6 +97,17 @@ Daily automation is defined in `.github/workflows/daily_radar.yml`. It can be st
 * `TELEGRAM_CHAT_ID`: destination chat ID.
 
 The daily workflow writes Google secrets into runner-local `credentials.json` and `.env`, runs the three approved collectors, loads CSV artifacts into raw Google Sheets tabs, runs `python3 scripts/rebuild_radar.py`, then sends Telegram alerts. Generated CSVs remain ignored by git and are not committed.
+
+The scheduled run executes at `07:15 UTC` every day. During daylight saving time
+in Madrid, that is `09:15 Europe/Madrid`.
+
+After every source collection step, the workflow sends a Telegram capture summary
+with the sources consulted, extracted CSV row counts, and any collector failure.
+The same summary can be checked locally without sending a message:
+
+```bash
+python3 scripts/send_capture_summary.py --dry-run
+```
 
 External sources can fail transiently. Capitol Trades can return HTTP 429 rate limits from GitHub Actions, and the SEC or USASpending endpoints can be unavailable or slow. When a collector fails in the daily workflow, the workflow logs a warning, skips only that source's loader for the run, and rebuilds the derived radar from the raw Google Sheets data already available.
 
@@ -172,7 +201,8 @@ In GitHub Actions, set `GOOGLE_SHEETS_ID` and `GOOGLE_CREDENTIALS_JSON` as repos
 
 Telegram operations require `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` in `.env` locally or as GitHub repository secrets.
 
-SEC collection can optionally set `SEC_USER_AGENT` in the environment.
+SEC collection should set `SEC_USER_AGENT` in `.env` locally and as a GitHub
+repository secret for daily runs.
 
 ## Restrictions
 
