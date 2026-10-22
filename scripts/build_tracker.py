@@ -45,7 +45,22 @@ SCORECARD_HEADER = [
     "last_filing",
     "followed",
     "beats_market",
+    "red_flags",
+    "red_flag_reasons",
+    "conflict_evaluated",
+    "conflict_avg_excess",
+    "other_avg_excess",
+    "late_filing_pct",
     "politician_key",
+]
+GROUP_HEADER = [
+    "group", "buys", "evaluated_90d", "avg_excess_30d", "avg_excess_90d", "median_excess_90d",
+    "hit_rate_90d", "avg_excess_180d", "avg_pre_disclosure_move",
+]
+WATCHLIST_HEADER = [
+    "red_flags", "politician", "chamber", "party", "red_flag_reasons", "conflict_evaluated",
+    "conflict_avg_excess", "other_avg_excess", "avg_excess_30d", "avg_pre_disclosure_move",
+    "late_filing_pct", "buys", "last_filing",
 ]
 HOLDINGS_HEADER = ["strategy", "ticker", "weight_pct", "value_usd", "politicians", "since", "conflict", "options"]
 SUMMARY_HEADER = [
@@ -98,6 +113,13 @@ def merged_nav(nav_by_strategy, prices):
         record[BENCHMARK] = round(spy / base * 100, 4) if spy and base else ""
         records.append(record)
     return header, records
+
+
+def insider_watchlist(scorecard_rows):
+    """Politicians with >= 2 red flags of a possible informational edge."""
+    rows = [r for r in scorecard_rows if (r.get("red_flags") or 0) >= 2]
+    rows.sort(key=lambda r: (-r["red_flags"], -(r.get("conflict_avg_excess") or -1e9)))
+    return [{c: fmt(r.get(c)) for c in WATCHLIST_HEADER} for r in rows]
 
 
 def build(raw_rows, prices, config):
@@ -189,11 +211,25 @@ def main():
             f"({s['start']}..{s['end']}), open {s['open_positions']}"
         )
     print(f"Scorecard politicians: {len(scorecard)}")
+    groups = tracker.group_comparison(trades, prices, config)
+    print("\nGroup comparison vs S&P 500 (excess return, %):")
+    for g in groups:
+        print(
+            f"- {g['group']}: n={g['evaluated_90d']} | 30d {fmt(g['avg_excess_30d'])} | 90d {fmt(g['avg_excess_90d'])} "
+            f"(mediana {fmt(g['median_excess_90d'])}, aciertos {fmt(g['hit_rate_90d'])}%) | 180d {fmt(g['avg_excess_180d'])} "
+            f"| pre-disclosure {fmt(g['avg_pre_disclosure_move'])}"
+        )
+    watchlist = insider_watchlist(scorecard)
+    print(f"\nInsider watchlist (>=2 red flags): {len(watchlist)}")
+    for w in watchlist[:20]:
+        print(f"- [{w['red_flags']}] {w['politician']} ({w['party']}, {w['chamber']}): {w['red_flag_reasons']} | conflicto {w['conflict_avg_excess']} vs resto {w['other_avg_excess']} (n={w['conflict_evaluated']})")
     if args.dry_run:
         return
 
     replace_worksheet(sheet, "politician_scorecard", SCORECARD_HEADER, scorecard_records(scorecard, config))
     replace_worksheet(sheet, "replica_holdings", HOLDINGS_HEADER, holdings)
+    replace_worksheet(sheet, "insider_analysis", GROUP_HEADER, [{c: fmt(g.get(c)) for c in GROUP_HEADER} for g in groups])
+    replace_worksheet(sheet, "insider_watchlist", WATCHLIST_HEADER, watchlist)
     replace_worksheet(sheet, "copy_portfolio_summary", SUMMARY_HEADER, summaries)
     nav_header, nav_records = merged_nav(navs, prices)
     if nav_records:

@@ -86,6 +86,8 @@ def tradeable_trades(raw_rows, config):
                 "amount_mid": amount_midpoint(row.get("amount", "")),
                 "conflict": row.get("conflict", "") == "YES",
                 "conflict_score": int(row.get("conflict_score") or 0),
+                "leadership": "cargo de liderazgo" in (row.get("conflict_reason") or ""),
+                "delay": int(row.get("disclosure_delay_days") or 0) if str(row.get("disclosure_delay_days") or "").lstrip("-").isdigit() else None,
                 "filing_id": row.get("filing_id", ""),
                 "source_url": row.get("source_url", ""),
             }
@@ -153,6 +155,89 @@ def _median(values):
     return statistics.median(values) if values else None
 
 
+DEFAULT_INSIDER_FLAGS = {
+    "min_conflict_trades": 5,
+    "conflict_edge_pts": 2.0,
+    "min_pre_move_trades": 10,
+    "pre_move_pct": 1.5,
+    "late_filing_days": 45,
+    "late_filing_pct": 20.0,
+    "min_short_term_trades": 10,
+    "short_term_excess_pct": 1.5,
+}
+
+
+def insider_indicators(buys, metrics, horizon, config):
+    """Red flags that hint at an informational edge (not proof of anything).
+
+    1. Conflict edge: buys in sectors their committees oversee beat the S&P 500 and
+       beat their own other buys by a margin.
+    2. Pre-disclosure move: stocks tend to rise between the trade and its disclosure.
+    3. Late filer: frequent disclosures after the STOCK Act 45-day limit.
+    4. Short-term edge: strong 30-day excess return (information tends to be short-lived).
+    """
+    rules = {**DEFAULT_INSIDER_FLAGS, **config.get("insider_flags", {})}
+    key = f"excess_{horizon}"
+    conflict = [m[key] for t, m in zip(buys, metrics) if t["conflict"] and m.get(key) is not None]
+    other = [m[key] for t, m in zip(buys, metrics) if not t["conflict"] and m.get(key) is not None]
+    pre = [m["pre_move"] for m in metrics if m.get("pre_move") is not None]
+    short = [m["excess_30"] for m in metrics if m.get("excess_30") is not None]
+    delays = [t["delay"] for t in buys if t.get("delay") is not None]
+    late_pct = sum(1 for d in delays if d > rules["late_filing_days"]) / len(delays) * 100 if delays else None
+    conflict_avg, other_avg = _avg(conflict), _avg(other)
+    flags = []
+    if (
+        len(conflict) >= rules["min_conflict_trades"] and conflict_avg is not None and conflict_avg > 0
+        and conflict_avg - (other_avg or 0) > rules["conflict_edge_pts"]
+    ):
+        flags.append("compras en sectores de su comité baten al mercado")
+    if len(pre) >= rules["min_pre_move_trades"] and _avg(pre) > rules["pre_move_pct"]:
+        flags.append("la acción sube antes de hacerse pública la compra")
+    if late_pct is not None and len(delays) >= 5 and late_pct >= rules["late_filing_pct"]:
+        flags.append("declara tarde con frecuencia")
+    if len(short) >= rules["min_short_term_trades"] and _avg(short) > rules["short_term_excess_pct"]:
+        flags.append("ventaja fuerte a 30 días")
+    return {
+        "conflict_evaluated": len(conflict),
+        "conflict_avg_excess": conflict_avg,
+        "other_avg_excess": other_avg,
+        "late_filing_pct": late_pct,
+        "red_flags": len(flags),
+        "red_flag_reasons": "; ".join(flags),
+    }
+
+
+def group_comparison(trades, prices, config):
+    """Compare buy groups vs the S&P 500: are 'informed-looking' buys any better?"""
+    horizons = config["scorecard"]["horizons_days"]
+    buys = [t for t in trades if t["trade_type"] in BUY_TYPES and prices.has(t["ticker"])]
+    metrics = {id(t): trade_returns(t, prices, horizons) for t in buys}
+    groups = [
+        ("Todas las compras del Congreso", lambda t: True),
+        ("Compras SIN relación con su comité", lambda t: not t["conflict"]),
+        ("Compras en sectores de su comité (conflicto)", lambda t: t["conflict"]),
+        ("Conflicto + preside/ranking del comité", lambda t: t["conflict"] and t["leadership"]),
+        ("Conflicto + importe >= 50.001 $", lambda t: t["conflict"] and t["amount_mid"] >= 50001),
+        ("Compras declaradas tarde (> 45 días)", lambda t: (t.get("delay") or 0) > 45),
+        ("Compras de opciones", lambda t: t["is_option"]),
+        ("Compras >= 250.001 $", lambda t: t["amount_mid"] >= 250001),
+    ]
+    rows = []
+    for name, predicate in groups:
+        selected = [metrics[id(t)] for t in buys if predicate(t)]
+        row = {"group": name, "buys": len(selected)}
+        for horizon in horizons:
+            values = [m.get(f"excess_{horizon}") for m in selected]
+            values = [v for v in values if v is not None]
+            row[f"evaluated_{horizon}d"] = len(values)
+            row[f"avg_excess_{horizon}d"] = _avg(values)
+            row[f"median_excess_{horizon}d"] = _median(values)
+            row[f"hit_rate_{horizon}d"] = sum(1 for v in values if v > 0) / len(values) * 100 if values else None
+        row["avg_pre_disclosure_move"] = _avg(m.get("pre_move") for m in selected)
+        rows.append(row)
+    return rows
+
+
 def build_scorecard(trades, prices, config):
     horizons = config["scorecard"]["horizons_days"]
     min_eval = config["scorecard"]["min_evaluated_trades"]
@@ -184,6 +269,7 @@ def build_scorecard(trades, prices, config):
         for horizon in horizons:
             row[f"avg_excess_{horizon}d"] = _avg(m.get(f"excess_{horizon}") for m in metrics)
             row[f"median_excess_{horizon}d"] = _median(m.get(f"excess_{horizon}") for m in metrics)
+        row.update(insider_indicators(buys, metrics, main, config))
         row["ranked"] = "YES" if len(evaluated) >= min_eval else "NO"
         rows.append(row)
 
@@ -274,6 +360,8 @@ def trade_included(trade, rules, followed):
         if rule == "conflict" and trade["conflict"]:
             return True
         if rule == "beaters" and trade.get("beater"):
+            return True
+        if rule == "leadership_conflict" and trade["conflict"] and trade.get("leadership"):
             return True
         if rule.startswith("bioguide:") and trade["bioguide_id"] == rule.split(":", 1)[1]:
             return True

@@ -176,7 +176,12 @@ def validate_tracker_logic():
     # 10 outcomes needed, each known ~90 days after entry: the 1st trades cannot qualify.
     if first_true < 20 or not all(flags[first_true:]) or any(flags[:first_true]):
         raise ValueError(f"tracker: point-in-time beater flags look ahead {flags}")
-    print("OK tracker_logic: no look-ahead entry/exit, NAV vs SPY, scorecard, point-in-time ranking")
+    buys = [{"conflict": i < 6, "delay": 60 if i < 3 else 10} for i in range(12)]
+    metrics = [{"excess_90": 8.0 if b["conflict"] else -1.0, "excess_30": 3.0, "pre_move": 2.0} for b in buys]
+    flags = tracker.insider_indicators(buys, metrics, 90, config)
+    if flags["red_flags"] != 4 or "comité" not in flags["red_flag_reasons"] or round(flags["late_filing_pct"]) != 25:
+        raise ValueError(f"tracker: insider red flags wrong {flags}")
+    print("OK tracker_logic: no look-ahead entry/exit, NAV vs SPY, scorecard, point-in-time ranking, red flags")
     return 1
 
 

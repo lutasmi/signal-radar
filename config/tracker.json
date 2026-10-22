@@ -81,6 +81,26 @@
       "max_hold_days": 365
     },
     {
+      "id": "conflictos",
+      "name": "Solo compras en sectores de su comité",
+      "include": [
+        "conflict"
+      ],
+      "weighting": "amount",
+      "max_lot_usd": 100000,
+      "max_hold_days": 365
+    },
+    {
+      "id": "liderazgo",
+      "name": "Conflicto + preside/ranking del comité",
+      "include": [
+        "leadership_conflict"
+      ],
+      "weighting": "amount",
+      "max_lot_usd": 100000,
+      "max_hold_days": 365
+    },
+    {
       "id": "pelosi",
       "name": "Réplica Pelosi",
       "include": [
@@ -134,5 +154,16 @@
     "min_evaluated_trades": 10,
     "min_avg_excess": 0.0,
     "min_hit_rate": 50.0
+  },
+  "insider_flags": {
+    "_doc": "Thresholds for red flags of a possible informational edge (see radar/tracker.py insider_indicators).",
+    "min_conflict_trades": 5,
+    "conflict_edge_pts": 2.0,
+    "min_pre_move_trades": 10,
+    "pre_move_pct": 1.5,
+    "late_filing_days": 45,
+    "late_filing_pct": 20.0,
+    "min_short_term_trades": 10,
+    "short_term_excess_pct": 1.5
   }
 }
