@@ -14,6 +14,14 @@ on:
   schedule:
     - cron: "15 7 * * *"
 
+permissions:
+  contents: read
+  actions: write
+
+concurrency:
+  group: signal-radar-sheets
+  cancel-in-progress: false
+
 jobs:
   run-radar:
     runs-on: ubuntu-latest
@@ -49,17 +57,6 @@ jobs:
           printf '%s' "$GOOGLE_CREDENTIALS_JSON" > credentials.json
           printf 'GOOGLE_SHEETS_ID=%s\n' "$GOOGLE_SHEETS_ID" > .env
 
-      - name: Collect Capitol Trades
-        if: ${{ github.event_name != 'workflow_dispatch' || inputs.telegram_test != 'true' }}
-        id: collect_capitol_trades
-        continue-on-error: true
-        run: python3 collectors/collect_capitol_trades.py --max-rows 120 --delay 0.5
-
-      - name: Warn when Capitol Trades is skipped
-        if: ${{ (github.event_name != 'workflow_dispatch' || inputs.telegram_test != 'true') && steps.collect_capitol_trades.outcome == 'failure' }}
-        run: |
-          echo "::warning::Capitol Trades collector failed, often due to HTTP 429 rate limiting from GitHub Actions. Skipping raw_capitol_trades load for this run and continuing with existing Google Sheets data."
-
       - name: Collect SEC Form 4
         if: ${{ github.event_name != 'workflow_dispatch' || inputs.telegram_test != 'true' }}
         id: collect_sec_form4
@@ -84,19 +81,104 @@ jobs:
         run: |
           echo "::warning::USASpending collector failed. Skipping raw_usaspending load for this run and continuing with existing Google Sheets data."
 
+      - name: Collect SAM.gov
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.telegram_test != 'true' }}
+        id: collect_sam_gov
+        continue-on-error: true
+        env:
+          SAM_GOV_API_KEY: ${{ secrets.SAM_GOV_API_KEY }}
+        run: python3 collectors/collect_sam_gov.py --days 30 --limit 100 --max-pages 2
+
+      - name: Warn when SAM.gov is skipped
+        if: ${{ (github.event_name != 'workflow_dispatch' || inputs.telegram_test != 'true') && steps.collect_sam_gov.outcome == 'failure' }}
+        run: |
+          echo "::warning::SAM.gov collector failed. Skipping raw_sam_gov load for this run and continuing with existing Google Sheets data."
+
+      - name: Collect Congress.gov
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.telegram_test != 'true' }}
+        id: collect_congress_gov
+        continue-on-error: true
+        env:
+          CONGRESS_GOV_API_KEY: ${{ secrets.CONGRESS_GOV_API_KEY }}
+        run: python3 collectors/collect_congress_gov.py --use-demo-key --limit 100 --max-pages 2
+
+      - name: Warn when Congress.gov is skipped
+        if: ${{ (github.event_name != 'workflow_dispatch' || inputs.telegram_test != 'true') && steps.collect_congress_gov.outcome == 'failure' }}
+        run: |
+          echo "::warning::Congress.gov collector failed. Skipping raw_congress_gov load for this run and continuing with existing Google Sheets data."
+
+      - name: Collect Federal Register
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.telegram_test != 'true' }}
+        id: collect_federal_register
+        continue-on-error: true
+        run: python3 collectors/collect_federal_register.py --per-page 100 --max-pages 2
+
+      - name: Warn when Federal Register is skipped
+        if: ${{ (github.event_name != 'workflow_dispatch' || inputs.telegram_test != 'true') && steps.collect_federal_register.outcome == 'failure' }}
+        run: |
+          echo "::warning::Federal Register collector failed. Skipping raw_federal_register load for this run and continuing with existing Google Sheets data."
+
+      - name: Collect LDA.gov
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.telegram_test != 'true' }}
+        id: collect_lda_gov
+        continue-on-error: true
+        run: python3 collectors/collect_lda_gov.py --page-size 100 --max-pages 2
+
+      - name: Warn when LDA.gov is skipped
+        if: ${{ (github.event_name != 'workflow_dispatch' || inputs.telegram_test != 'true') && steps.collect_lda_gov.outcome == 'failure' }}
+        run: |
+          echo "::warning::LDA.gov collector failed. Skipping raw_lda_gov load for this run and continuing with existing Google Sheets data."
+
+      - name: Collect SEC EDGAR additional
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.telegram_test != 'true' }}
+        id: collect_sec_edgar_additional
+        continue-on-error: true
+        run: python3 collectors/collect_sec_edgar_additional.py --count 40 --max-pages 1 --delay 0.05
+
+      - name: Warn when SEC EDGAR additional is skipped
+        if: ${{ (github.event_name != 'workflow_dispatch' || inputs.telegram_test != 'true') && steps.collect_sec_edgar_additional.outcome == 'failure' }}
+        run: |
+          echo "::warning::SEC EDGAR additional collector failed. Skipping raw_sec_edgar_additional load for this run and continuing with existing Google Sheets data."
+
+      - name: Collect FEC
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.telegram_test != 'true' }}
+        id: collect_fec
+        continue-on-error: true
+        env:
+          FEC_API_KEY: ${{ secrets.FEC_API_KEY }}
+        run: python3 collectors/collect_fec.py --use-demo-key --per-page 100 --max-pages 2
+
+      - name: Warn when FEC is skipped
+        if: ${{ (github.event_name != 'workflow_dispatch' || inputs.telegram_test != 'true') && steps.collect_fec.outcome == 'failure' }}
+        run: |
+          echo "::warning::FEC collector failed. Skipping raw_fec load for this run and continuing with existing Google Sheets data."
+
+      - name: Collect Grants.gov
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.telegram_test != 'true' }}
+        id: collect_grants_gov
+        continue-on-error: true
+        run: python3 collectors/collect_grants_gov.py --keyword energy --rows 100 --max-pages 2
+
+      - name: Warn when Grants.gov is skipped
+        if: ${{ (github.event_name != 'workflow_dispatch' || inputs.telegram_test != 'true') && steps.collect_grants_gov.outcome == 'failure' }}
+        run: |
+          echo "::warning::Grants.gov collector failed. Skipping raw_grants_gov load for this run and continuing with existing Google Sheets data."
+
       - name: Send capture summary
         if: ${{ always() && (github.event_name != 'workflow_dispatch' || inputs.telegram_test != 'true') }}
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-          CAPITOL_TRADES_OUTCOME: ${{ steps.collect_capitol_trades.outcome }}
           SEC_FORM4_OUTCOME: ${{ steps.collect_sec_form4.outcome }}
           USASPENDING_OUTCOME: ${{ steps.collect_usaspending.outcome }}
+          SAM_GOV_OUTCOME: ${{ steps.collect_sam_gov.outcome }}
+          CONGRESS_GOV_OUTCOME: ${{ steps.collect_congress_gov.outcome }}
+          FEDERAL_REGISTER_OUTCOME: ${{ steps.collect_federal_register.outcome }}
+          LDA_GOV_OUTCOME: ${{ steps.collect_lda_gov.outcome }}
+          SEC_EDGAR_ADDITIONAL_OUTCOME: ${{ steps.collect_sec_edgar_additional.outcome }}
+          FEC_OUTCOME: ${{ steps.collect_fec.outcome }}
+          GRANTS_GOV_OUTCOME: ${{ steps.collect_grants_gov.outcome }}
         run: python3 scripts/send_capture_summary.py
-
-      - name: Load Capitol Trades
-        if: ${{ (github.event_name != 'workflow_dispatch' || inputs.telegram_test != 'true') && steps.collect_capitol_trades.outcome == 'success' }}
-        run: python3 loaders/load_capitol_trades_csv_to_sheets.py
 
       - name: Load SEC Form 4
         if: ${{ (github.event_name != 'workflow_dispatch' || inputs.telegram_test != 'true') && steps.collect_sec_form4.outcome == 'success' }}
@@ -106,12 +188,43 @@ jobs:
         if: ${{ (github.event_name != 'workflow_dispatch' || inputs.telegram_test != 'true') && steps.collect_usaspending.outcome == 'success' }}
         run: python3 loaders/load_usaspending_csv_to_sheets.py
 
+      - name: Load SAM.gov
+        if: ${{ (github.event_name != 'workflow_dispatch' || inputs.telegram_test != 'true') && steps.collect_sam_gov.outcome == 'success' }}
+        run: python3 loaders/load_sam_gov_csv_to_sheets.py
+
+      - name: Load Congress.gov
+        if: ${{ (github.event_name != 'workflow_dispatch' || inputs.telegram_test != 'true') && steps.collect_congress_gov.outcome == 'success' }}
+        run: python3 loaders/load_congress_gov_csv_to_sheets.py
+
+      - name: Load Federal Register
+        if: ${{ (github.event_name != 'workflow_dispatch' || inputs.telegram_test != 'true') && steps.collect_federal_register.outcome == 'success' }}
+        run: python3 loaders/load_federal_register_csv_to_sheets.py
+
+      - name: Load LDA.gov
+        if: ${{ (github.event_name != 'workflow_dispatch' || inputs.telegram_test != 'true') && steps.collect_lda_gov.outcome == 'success' }}
+        run: python3 loaders/load_lda_gov_csv_to_sheets.py
+
+      - name: Load SEC EDGAR additional
+        if: ${{ (github.event_name != 'workflow_dispatch' || inputs.telegram_test != 'true') && steps.collect_sec_edgar_additional.outcome == 'success' }}
+        run: python3 loaders/load_sec_edgar_additional_csv_to_sheets.py
+
+      - name: Load FEC
+        if: ${{ (github.event_name != 'workflow_dispatch' || inputs.telegram_test != 'true') && steps.collect_fec.outcome == 'success' }}
+        run: python3 loaders/load_fec_csv_to_sheets.py
+
+      - name: Load Grants.gov
+        if: ${{ (github.event_name != 'workflow_dispatch' || inputs.telegram_test != 'true') && steps.collect_grants_gov.outcome == 'success' }}
+        run: python3 loaders/load_grants_gov_csv_to_sheets.py
+
       - name: Validate raw data quality
         if: ${{ github.event_name != 'workflow_dispatch' || inputs.telegram_test != 'true' }}
+        # Report-only: data quality issues must not block the radar or alerts.
+        continue-on-error: true
         run: python3 scripts/validate_raw_quality.py
 
       - name: Raw data metrics
         if: ${{ github.event_name != 'workflow_dispatch' || inputs.telegram_test != 'true' }}
+        continue-on-error: true
         run: python3 scripts/collect_daily_metrics.py
 
       - name: Rebuild radar
@@ -120,6 +233,7 @@ jobs:
 
       - name: Radar metrics
         if: ${{ github.event_name != 'workflow_dispatch' || inputs.telegram_test != 'true' }}
+        continue-on-error: true
         run: python3 scripts/collect_daily_metrics.py
 
       - name: Send Telegram alerts
@@ -128,3 +242,12 @@ jobs:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: python3 scripts/send_telegram_alerts.py
+
+      - name: Keep scheduled workflows alive
+        if: ${{ always() }}
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh workflow enable daily_radar.yml --repo "$GITHUB_REPOSITORY"
+          gh workflow enable congress_watch.yml --repo "$GITHUB_REPOSITORY"

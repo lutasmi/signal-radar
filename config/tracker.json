@@ -1,0 +1,125 @@
+{
+  "_doc": "Congress tracker settings: politicians to follow (alert on every trade), cluster alerts, and the simulated copy portfolios. Edit freely; bioguide ids come from unitedstates/congress-legislators.",
+  "followed_politicians": [
+    {
+      "bioguide": "P000197",
+      "name": "Nancy Pelosi"
+    },
+    {
+      "bioguide": "G000583",
+      "name": "Josh Gottheimer"
+    },
+    {
+      "bioguide": "K000389",
+      "name": "Ro Khanna"
+    },
+    {
+      "bioguide": "M001157",
+      "name": "Michael T. McCaul"
+    },
+    {
+      "bioguide": "C001120",
+      "name": "Dan Crenshaw"
+    },
+    {
+      "bioguide": "T000278",
+      "name": "Tommy Tuberville"
+    },
+    {
+      "bioguide": "B001327",
+      "name": "Robert P. Bresnahan, Jr."
+    },
+    {
+      "bioguide": "C001123",
+      "name": "Gilbert Ray Cisneros, Jr."
+    },
+    {
+      "bioguide": "M001243",
+      "name": "David McCormick"
+    },
+    {
+      "bioguide": "F000110",
+      "name": "Cleo Fields"
+    },
+    {
+      "bioguide": "M001217",
+      "name": "Jared Moskowitz"
+    },
+    {
+      "bioguide": "W000797",
+      "name": "Debbie Wasserman Schultz"
+    },
+    {
+      "bioguide": "S001217",
+      "name": "Rick Scott"
+    }
+  ],
+  "alerts": {
+    "max_filing_age_days": 10,
+    "followed_min_amount": 1001,
+    "followed_include_sells": true,
+    "cluster_min_politicians": 3,
+    "cluster_window_days": 30,
+    "top_scorecard_politicians": 10,
+    "top_scorecard_min_trades": 5
+  },
+  "scorecard": {
+    "horizons_days": [
+      30,
+      90,
+      180
+    ],
+    "min_evaluated_trades": 3
+  },
+  "portfolios": [
+    {
+      "id": "trumpito",
+      "name": "Trumpito ETF (seguidos + conflictos de interés)",
+      "include": [
+        "followed",
+        "conflict"
+      ],
+      "weighting": "amount",
+      "max_lot_usd": 100000,
+      "max_hold_days": 365
+    },
+    {
+      "id": "pelosi",
+      "name": "Réplica Pelosi",
+      "include": [
+        "bioguide:P000197"
+      ],
+      "weighting": "amount",
+      "max_lot_usd": 5000000,
+      "max_hold_days": 730
+    },
+    {
+      "id": "congreso",
+      "name": "Todo el Congreso (referencia)",
+      "include": [
+        "all"
+      ],
+      "weighting": "amount",
+      "max_lot_usd": 250000,
+      "max_hold_days": 365
+    }
+  ],
+  "tradeable_asset_types": [
+    "ST",
+    "OP",
+    "EF",
+    "Stock",
+    "Stock Option",
+    "Other Securities"
+  ],
+  "agent": {
+    "_doc": "Claude (Anthropic API). Requires the ANTHROPIC_API_KEY secret; without it everything else keeps working.",
+    "enabled": true,
+    "model": "claude-sonnet-5-5",
+    "vision_model": "claude-sonnet-5-5",
+    "max_vision_filings_per_run": 5,
+    "max_reviews_per_run": 6,
+    "max_searches_per_review": 6,
+    "weekly_memo": true
+  }
+}

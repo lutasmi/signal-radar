@@ -1,0 +1,105 @@
+{
+  "_doc": "Committee -> sector jurisdiction map and sector definitions used to flag congressional trades with potential conflict of interest. A trade is flagged when the member sits on a committee whose jurisdiction includes the sector of the traded company. Sector of a ticker = curated ticker list first, then SEC SIC code ranges.",
+  "committees": {
+    "SSAS": ["defense"],
+    "HSAS": ["defense"],
+    "SSAP02": ["defense"],
+    "HSAP02": ["defense"],
+    "SSAP19": ["defense"],
+    "HSAP18": ["defense"],
+    "SLIN": ["defense", "technology"],
+    "HLIG": ["defense", "technology"],
+    "SSFR": ["defense"],
+    "HSFA": ["defense"],
+    "SSGA": ["defense", "technology"],
+    "HSHM": ["defense", "technology"],
+    "SSAP14": ["defense", "technology"],
+    "HSAP15": ["defense", "technology"],
+    "HSZS": ["defense", "technology"],
+    "SSEG": ["energy"],
+    "HSII": ["energy"],
+    "SSAP22": ["energy"],
+    "HSAP10": ["energy"],
+    "SSEV": ["energy", "transport"],
+    "HSIF": ["energy", "health", "telecom", "technology"],
+    "SSHR": ["health"],
+    "SPAG": ["health"],
+    "SSFI": ["health", "financials"],
+    "HSWM": ["health", "financials"],
+    "SSAP18": ["health"],
+    "HSAP07": ["health"],
+    "SSVA": ["health"],
+    "HSVR": ["health"],
+    "SSBK": ["financials"],
+    "HSBA": ["financials"],
+    "SSAP23": ["financials"],
+    "HSAP23": ["financials"],
+    "SSCM": ["technology", "telecom", "transport"],
+    "HSSY": ["technology", "energy"],
+    "HSPW": ["transport"],
+    "SSJU": ["technology"],
+    "HSJU": ["technology"],
+    "SSAF": ["agriculture"],
+    "HSAG": ["agriculture"],
+    "SSAP01": ["agriculture", "health"],
+    "HSAP01": ["agriculture", "health"]
+  },
+  "sectors": {
+    "defense": {
+      "label": "Defensa / aeroespacial",
+      "sic_ranges": [[3480, 3489], [3720, 3729], [3730, 3732], [3760, 3769], [3795, 3795], [3812, 3812]],
+      "tickers": ["LMT", "NOC", "GD", "RTX", "LHX", "HII", "BA", "LDOS", "BAH", "CACI", "SAIC", "KTOS", "AVAV", "PLTR", "BWXT", "TXT", "TDG", "HEI", "HEI.A", "CW", "MRCY", "AXON", "PSN", "KBR", "HWM", "DRS", "VVX", "SPR", "RKLB", "LUNR", "RCAT", "AIR", "ESLT", "PKE", "MOG.A", "WWD", "HXL", "TGI", "AJRD", "ATRO", "DCO", "SWBI", "RGR", "OSK", "AM", "V2X", "BKSY", "PL", "IRDM", "VSAT", "GE", "HON"]
+    },
+    "energy": {
+      "label": "Energía",
+      "sic_ranges": [[1200, 1399], [2900, 2999], [4900, 4949], [4960, 4991]],
+      "tickers": ["XOM", "CVX", "COP", "OXY", "EOG", "SLB", "HAL", "BKR", "PSX", "MPC", "VLO", "KMI", "WMB", "OKE", "ET", "EPD", "NEE", "DUK", "SO", "D", "AEP", "EXC", "CEG", "VST", "SMR", "OKLO", "CCJ", "FSLR", "ENPH", "LEU"]
+    },
+    "health": {
+      "label": "Salud / farmacéuticas",
+      "sic_ranges": [[2830, 2836], [3841, 3851], [5122, 5122], [6324, 6324], [8000, 8099]],
+      "tickers": ["UNH", "CVS", "CI", "HUM", "ELV", "CNC", "MOH", "PFE", "MRK", "LLY", "JNJ", "ABBV", "BMY", "AMGN", "GILD", "MRNA", "NVO", "AZN", "TMO", "DHR", "ABT", "MDT", "ISRG", "MCK", "CAH", "COR", "HCA"]
+    },
+    "financials": {
+      "label": "Finanzas / banca",
+      "sic_ranges": [[6000, 6299], [6311, 6411]],
+      "tickers": ["JPM", "BAC", "WFC", "C", "GS", "MS", "SCHW", "BLK", "V", "MA", "AXP", "PYPL", "COIN", "HOOD", "XYZ", "SQ", "SOFI", "USB", "PNC", "TFC", "COF", "FITB", "KEY", "MTB", "RF", "HBAN"]
+    },
+    "technology": {
+      "label": "Tecnología / semiconductores",
+      "sic_ranges": [[3570, 3579], [3661, 3679], [7370, 7379]],
+      "tickers": ["AAPL", "MSFT", "GOOGL", "GOOG", "META", "AMZN", "NVDA", "AMD", "INTC", "AVGO", "QCOM", "TSM", "MU", "ORCL", "CRM", "PLTR", "CRWD", "PANW", "FTNT", "ZS", "NET", "S", "OKTA", "IBM", "CSCO", "ANET", "SMCI", "DELL"]
+    },
+    "telecom": {
+      "label": "Telecomunicaciones",
+      "sic_ranges": [[4810, 4899]],
+      "tickers": ["T", "VZ", "TMUS", "CMCSA", "CHTR", "LUMN", "ASTS", "IRDM", "SATS"]
+    },
+    "transport": {
+      "label": "Transporte / infraestructura",
+      "sic_ranges": [[3711, 3716], [3740, 3743], [4000, 4799]],
+      "tickers": ["UNP", "CSX", "NSC", "UPS", "FDX", "DAL", "UAL", "AAL", "LUV", "VMC", "MLM", "CAT", "DE", "URI", "PWR"]
+    },
+    "agriculture": {
+      "label": "Agricultura / alimentación",
+      "sic_ranges": [[100, 999], [2000, 2099], [2870, 2879], [3523, 3523], [5150, 5159]],
+      "tickers": ["ADM", "BG", "CTVA", "FMC", "MOS", "NTR", "CF", "DE", "TSN", "HRL", "AGCO"]
+    }
+  },
+  "scoring": {
+    "base_conflict": 50,
+    "leadership_bonus": 15,
+    "subcommittee_bonus": 5,
+    "late_filing_bonus": 10,
+    "late_filing_days": 45,
+    "amount_bonus": [
+      {"min_amount": 1000001, "weight": 25},
+      {"min_amount": 250001, "weight": 20},
+      {"min_amount": 100001, "weight": 15},
+      {"min_amount": 50001, "weight": 10},
+      {"min_amount": 15001, "weight": 5}
+    ],
+    "alert_min_score": 50,
+    "alert_max_filing_age_days": 30
+  }
+}

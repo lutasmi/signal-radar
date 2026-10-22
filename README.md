@@ -1,13 +1,34 @@
 # Signal Radar
 
-Signal Radar combines public Capitol Trades, SEC Form 4 insider purchases, and USASpending federal contract data into a simple Google Sheets pipeline.
+## Congress tracker (foco principal)
+
+Alertas por Telegram y carteras réplica estilo "Pelosi ETF" a partir de las
+declaraciones oficiales de operaciones de congresistas (House Clerk + Senate eFD),
+con detección de conflictos comité↔sector, ranking de políticos frente al S&P 500
+y un agente (Claude) que lee declaraciones escaneadas e investiga cada alerta.
+
+Documentación completa: [`docs/congress_tracker.md`](docs/congress_tracker.md).
+
+Capitol Trades queda como colector heredado: bloquea las peticiones desde GitHub Actions
+y se ha sustituido en el workflow diario por las fuentes oficiales.
+
+Signal Radar combines public Capitol Trades, SEC Form 4 insider purchases,
+USASpending federal contract data, and validated official public-source
+catalysts into a simple Google Sheets pipeline.
 
 Google Sheets is the source of truth:
 
 ```text
-Capitol Trades -> raw_capitol_trades
-SEC Form 4    -> raw_sec_form4
-USASpending   -> raw_usaspending
+Capitol Trades          -> raw_capitol_trades
+SEC Form 4             -> raw_sec_form4
+USASpending            -> raw_usaspending
+SAM.gov                -> raw_sam_gov
+Congress.gov           -> raw_congress_gov
+Federal Register       -> raw_federal_register
+LDA.gov                -> raw_lda_gov
+SEC EDGAR additional   -> raw_sec_edgar_additional
+FEC                    -> raw_fec
+Grants.gov             -> raw_grants_gov
 
 raw_* sheets  -> signals
 signals       -> cluster_signals
@@ -21,7 +42,14 @@ Local CSV files in `data/` are generated artifacts. They are useful for repeatab
 
 ## Current Phase
 
-The current baseline includes ingestion -> raw sheets -> signals plus intelligence layers in `cluster_signals`, `correlation_signals`, `priority_signals`, and `review_queue`. The radar identifies repeated ticker activity, repeated contract activity, simple explainable correlations, a small auditable priority list, and a daily review queue.
+The current baseline includes ingestion -> raw sheets -> signals plus
+intelligence layers in `cluster_signals`, `correlation_signals`,
+`priority_signals`, and `review_queue`. The radar identifies repeated ticker
+activity, repeated contract activity, repeated official public-source catalysts,
+simple explainable correlations, a small auditable priority list, and a daily
+review queue.
+
+The built V1 product is documented in `docs/product_v1.md`.
 
 ## Main Commands
 
@@ -35,9 +63,10 @@ python3 collectors/collect_sec_form4.py
 python3 collectors/collect_usaspending.py
 ```
 
-Candidate-source collectors write auditable raw responses under `data/raw/<source>/`
-and normalized CSVs under `data/processed/<source>/`. They are intentionally not
-loaded into Google Sheets yet:
+Additional official-source collectors write auditable raw responses under
+`data/raw/<source>/` and normalized CSVs under `data/processed/<source>/`.
+Validated sources are loaded into dedicated raw Google Sheets tabs before
+derived sheets are rebuilt:
 
 ```bash
 python3 collectors/collect_sam_gov.py
@@ -53,6 +82,8 @@ python3 collectors/collect_uspto.py
 SAM.gov and USPTO require real API keys for live extraction. Congress.gov and
 OpenFEC support `DEMO_KEY` for small validation samples, but production use
 should set `CONGRESS_GOV_API_KEY` and `FEC_API_KEY`.
+USPTO remains blocked until `USPTO_API_KEY` is available and live official
+records can be validated.
 
 The USASpending collector combines recent Department of Defense awards with a
 second pass over the largest recent awards, deduplicated by `award_id`.
@@ -63,6 +94,13 @@ Loaders append new rows to Google Sheets raw tabs:
 python3 loaders/load_capitol_trades_csv_to_sheets.py
 python3 loaders/load_sec_form4_csv_to_sheets.py
 python3 loaders/load_usaspending_csv_to_sheets.py
+python3 loaders/load_sam_gov_csv_to_sheets.py
+python3 loaders/load_congress_gov_csv_to_sheets.py
+python3 loaders/load_federal_register_csv_to_sheets.py
+python3 loaders/load_lda_gov_csv_to_sheets.py
+python3 loaders/load_sec_edgar_additional_csv_to_sheets.py
+python3 loaders/load_fec_csv_to_sheets.py
+python3 loaders/load_grants_gov_csv_to_sheets.py
 ```
 
 Signals are rebuilt from Google Sheets:
@@ -114,8 +152,14 @@ Daily automation is defined in `.github/workflows/daily_radar.yml`. It can be st
 * `GOOGLE_SHEETS_ID`: target spreadsheet ID.
 * `TELEGRAM_BOT_TOKEN`: Telegram bot token.
 * `TELEGRAM_CHAT_ID`: destination chat ID.
+* `SAM_GOV_API_KEY`: SAM.gov API key.
+* `CONGRESS_GOV_API_KEY`: Congress.gov API key for production volume.
+* `FEC_API_KEY`: OpenFEC API key for production volume.
 
-The daily workflow writes Google secrets into runner-local `credentials.json` and `.env`, runs the three approved collectors, loads CSV artifacts into raw Google Sheets tabs, runs `python3 scripts/rebuild_radar.py`, then sends Telegram alerts. Generated CSVs remain ignored by git and are not committed.
+The daily workflow writes Google secrets into runner-local `credentials.json`
+and `.env`, runs the approved collectors, loads CSV artifacts into raw Google
+Sheets tabs, runs `python3 scripts/rebuild_radar.py`, then sends Telegram
+alerts. Generated CSVs remain ignored by git and are not committed.
 
 The scheduled run executes at `07:15 UTC` every day. During daylight saving time
 in Madrid, that is `09:15 Europe/Madrid`.
@@ -142,6 +186,7 @@ The `review_queue` worksheet is the morning change tracker. It keeps `review_sta
 * `score_reason`: auditable explanation of score components.
 
 Scoring weights live in `config/scoring.json`, so weights can change without editing Python. The default config covers priority level, source diversity, cross-source/correlation types, signal types, repeated activity, recency, `review_today`, and lifecycle status.
+The scoring method is documented in `docs/scoring.md`.
 
 Telegram alerts are generated from `review_queue`:
 
@@ -153,7 +198,14 @@ python3 scripts/send_telegram_alerts.py
 
 `--test` sends a fixed Telegram integration test message without reading or writing Google Sheets.
 
-Default alert rule: `status = NEW`, `review_today = YES`, or `score_band = HIGH`. Sent alerts are appended to `telegram_alert_log`; reruns skip alerts whose `alert_id` is already logged. Dry-run prints candidate messages without sending Telegram messages or writing alert history.
+Default alert rule: `status = NEW`, `review_today = YES`, or
+`score_band = HIGH`. Sent alerts are appended to `telegram_alert_log`; reruns
+skip alerts whose `alert_id` is already logged. Dry-run prints candidate
+messages without sending Telegram messages or writing alert history.
+
+Telegram messages include who bought or acted, what was bought/affected, why
+the opportunity matters, linked signal detail, and an explicit score breakdown.
+The score remains deterministic and configurable in `config/scoring.json`.
 
 Morning workflow: check Telegram for concise high-priority radar alerts, then open Google Sheets for deeper review and manual notes.
 
@@ -225,4 +277,7 @@ repository secret for daily runs.
 
 ## Restrictions
 
-Do not add databases, Docker, Redis, microservices, Playwright, new data sources, new alert channels, or complex scoring unless explicitly requested. Telegram is the approved V1 alert channel. Future phases are tracked in `ROADMAP.md`.
+Do not add databases, Docker, Redis, microservices, Playwright, additional data
+sources beyond the validated V1 set, new alert channels, or complex scoring
+unless explicitly requested. Telegram is the approved V1 alert channel. Future
+phases are tracked in `ROADMAP.md`.

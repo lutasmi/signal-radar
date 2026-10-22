@@ -1,0 +1,3 @@
+document_number,publication_date,type,signal_type,title,agencies,agency_slugs,cfr_references,html_url,pdf_url,abstract
+2026-00001,2026-01-06,Proposed Rule,RULE_PROPOSED,Advanced semiconductor export controls,Department of Commerce,commerce,15 CFR 744,https://www.federalregister.gov/documents/2026/01/06/2026-00001/example,https://www.govinfo.gov/example-1.pdf,Proposed controls affecting semiconductor supply chains.
+2026-00002,2026-01-09,Rule,RULE_FINAL,Final semiconductor export controls,Department of Commerce,commerce,15 CFR 744,https://www.federalregister.gov/documents/2026/01/09/2026-00002/example,https://www.govinfo.gov/example-2.pdf,Final controls affecting semiconductor supply chains.

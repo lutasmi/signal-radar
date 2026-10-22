@@ -92,6 +92,12 @@ def priority_from_cluster(cluster):
             "Repeated contract activity has enough observations to deserve review.",
         )
 
+    if cluster_type == "PUBLIC_CATALYST_ACTIVITY":
+        return (
+            "MEDIUM",
+            "Repeated official public-source catalysts deserve review.",
+        )
+
     if cluster_type == "TICKER_ACTIVITY" and signal_count >= 2:
         return (
             "MEDIUM",

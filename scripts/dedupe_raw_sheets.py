@@ -16,6 +16,14 @@ from scripts import build_signals_sheet
 
 
 SOURCE_KEY_COLUMNS = {
+    build_signals_sheet.RAW_CONGRESS_PTR: [
+        "filing_id",
+        "owner",
+        "asset_name",
+        "trade_type",
+        "transaction_date",
+        "amount",
+    ],
     build_signals_sheet.RAW_CAPITOL_TRADES: [
         "politician",
         "transaction_date",

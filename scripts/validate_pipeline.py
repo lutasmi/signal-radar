@@ -1,5 +1,6 @@
 import argparse
 import csv
+import glob
 import sys
 from pathlib import Path
 
@@ -8,15 +9,39 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from collectors import collect_capitol_trades, collect_sec_form4, collect_usaspending
+from collectors import collect_congress_ptr
 from loaders import (
+    load_congress_ptr_csv_to_sheets,
+    load_congress_gov_csv_to_sheets,
     load_capitol_trades_csv_to_sheets,
+    load_fec_csv_to_sheets,
+    load_federal_register_csv_to_sheets,
+    load_grants_gov_csv_to_sheets,
+    load_lda_gov_csv_to_sheets,
+    load_sam_gov_csv_to_sheets,
     load_sec_form4_csv_to_sheets,
+    load_sec_edgar_additional_csv_to_sheets,
     load_usaspending_csv_to_sheets,
+)
+from collectors import (
+    collect_congress_gov,
+    collect_fec,
+    collect_federal_register,
+    collect_grants_gov,
+    collect_lda_gov,
+    collect_sam_gov,
+    collect_sec_edgar_additional,
 )
 from scripts import build_signals_sheet
 
 
 CSV_SPECS = [
+    (
+        "congress_ptr",
+        "congress_ptr_latest.csv",
+        collect_congress_ptr.FIELDNAMES,
+        load_congress_ptr_csv_to_sheets,
+    ),
     (
         "capitol_trades",
         "capitol_trades_latest.csv",
@@ -35,14 +60,64 @@ CSV_SPECS = [
         collect_usaspending.FIELDNAMES,
         load_usaspending_csv_to_sheets,
     ),
+    (
+        "sam_gov",
+        "sam_gov_latest.csv",
+        collect_sam_gov.FIELDNAMES,
+        load_sam_gov_csv_to_sheets,
+    ),
+    (
+        "congress_gov",
+        "congress_gov_latest.csv",
+        collect_congress_gov.FIELDNAMES,
+        load_congress_gov_csv_to_sheets,
+    ),
+    (
+        "federal_register",
+        "federal_register_latest.csv",
+        collect_federal_register.FIELDNAMES,
+        load_federal_register_csv_to_sheets,
+    ),
+    (
+        "lda_gov",
+        "lda_gov_latest.csv",
+        collect_lda_gov.FIELDNAMES,
+        load_lda_gov_csv_to_sheets,
+    ),
+    (
+        "sec_edgar_additional",
+        "sec_edgar_additional_latest.csv",
+        collect_sec_edgar_additional.FIELDNAMES,
+        load_sec_edgar_additional_csv_to_sheets,
+    ),
+    (
+        "fec",
+        "fec_latest.csv",
+        collect_fec.FIELDNAMES,
+        load_fec_csv_to_sheets,
+    ),
+    (
+        "grants_gov",
+        "grants_gov_latest.csv",
+        collect_grants_gov.FIELDNAMES,
+        load_grants_gov_csv_to_sheets,
+    ),
 ]
 
 DEFAULT_CSV_DIR = Path("data")
 
 WORKSHEET_BY_SOURCE = {
+    "congress_ptr": build_signals_sheet.RAW_CONGRESS_PTR,
     "capitol_trades": build_signals_sheet.RAW_CAPITOL_TRADES,
     "sec_form4": build_signals_sheet.RAW_SEC_FORM4,
     "usaspending": build_signals_sheet.RAW_USASPENDING,
+    "sam_gov": build_signals_sheet.RAW_SAM_GOV,
+    "congress_gov": build_signals_sheet.RAW_CONGRESS_GOV,
+    "federal_register": build_signals_sheet.RAW_FEDERAL_REGISTER,
+    "lda_gov": build_signals_sheet.RAW_LDA_GOV,
+    "sec_edgar_additional": build_signals_sheet.RAW_SEC_EDGAR_ADDITIONAL,
+    "fec": build_signals_sheet.RAW_FEC,
+    "grants_gov": build_signals_sheet.RAW_GRANTS_GOV,
 }
 
 
@@ -153,13 +228,26 @@ def resolve_csv_dir(csv_dir):
     return csv_dir
 
 
+def source_csv_file(csv_dir, name, csv_filename):
+    csv_file = csv_dir / csv_filename
+    if csv_file.exists():
+        return csv_file
+
+    processed_pattern = csv_dir / "processed" / name / f"{name}_*.csv"
+    matches = sorted(glob.glob(str(processed_pattern)))
+    if matches:
+        return Path(matches[-1])
+
+    return csv_file
+
+
 def validate_pipeline(require_csv, csv_dir=DEFAULT_CSV_DIR):
     worksheets = {}
     loaded_sources = []
     csv_dir = resolve_csv_dir(csv_dir)
 
     for name, csv_filename, expected_header, loader_module in CSV_SPECS:
-        csv_file = csv_dir / csv_filename
+        csv_file = source_csv_file(csv_dir, name, csv_filename)
         if not csv_file.exists():
             if require_csv:
                 raise FileNotFoundError(f"{name}: CSV not found: {csv_file}")

@@ -1,0 +1,3 @@
+accession,form_type,signal_type,company_name,cik,filing_date,updated_at,title,source_url
+0000000000-26-000001,8-K,MATERIAL_EVENT_8K,ORBITAL SYSTEMS INC,0000000001,2026-01-08,2026-01-08,8-K - ORBITAL SYSTEMS INC,https://www.sec.gov/Archives/example-1
+0000000000-26-000002,SC 13D,MAJOR_HOLDER_ENTRY,ORBITAL SYSTEMS INC,0000000001,2026-01-16,2026-01-16,SC 13D - ORBITAL SYSTEMS INC,https://www.sec.gov/Archives/example-2

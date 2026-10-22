@@ -55,3 +55,28 @@ def replace_worksheet(sheet, worksheet_name, header, records):
     worksheet.clear()
     if rows:
         worksheet.update(rows, value_input_option="RAW")
+
+
+def append_records(sheet, worksheet_name, header, records):
+    """Append records to a log-style worksheet, writing the header if missing."""
+    if not records:
+        return
+    worksheet = open_or_create_worksheet(sheet, worksheet_name, len(records), len(header))
+    first_row = worksheet.row_values(1)
+    if not first_row:
+        worksheet.append_row(header, value_input_option="RAW")
+    elif first_row != header:
+        worksheet.insert_row(header, 1, value_input_option="RAW")
+    worksheet.append_rows(
+        [[record.get(column, "") for column in header] for record in records],
+        value_input_option="RAW",
+    )
+
+
+def read_records_or_empty(sheet, worksheet_name):
+    import gspread
+
+    try:
+        return read_records(sheet, worksheet_name)
+    except gspread.exceptions.WorksheetNotFound:
+        return []

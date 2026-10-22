@@ -1,4 +1,5 @@
 import sys
+import time
 from collections import Counter
 from pathlib import Path
 
@@ -16,20 +17,47 @@ from scripts import build_signals_sheet
 from scripts.validate_raw_quality import QUALITY_SPECS, duplicate_count, exact_row_key, row_key
 
 
+MAX_READ_ATTEMPTS = 3
+READ_RETRY_SECONDS = [15, 45]
+
 DERIVED_WORKSHEETS = [
     "signals",
     "cluster_signals",
     "correlation_signals",
     "priority_signals",
     "review_queue",
+    "conflict_trades",
+    "ptr_manual_review",
     "telegram_alert_log",
 ]
+
+
+def is_rate_limit_error(error):
+    return "429" in str(error) or "Quota exceeded" in str(error)
+
+
+def read_with_retry(description, read_fn):
+    for attempt in range(1, MAX_READ_ATTEMPTS + 1):
+        try:
+            return read_fn()
+        except Exception as error:
+            if attempt >= MAX_READ_ATTEMPTS or not is_rate_limit_error(error):
+                raise
+            wait_seconds = READ_RETRY_SECONDS[attempt - 1]
+            print(
+                f"WARNING: Google Sheets read quota hit while reading {description}; "
+                f"retrying in {wait_seconds}s"
+            )
+            time.sleep(wait_seconds)
 
 
 def raw_metrics(sheet):
     lines = ["Raw source metrics", ""]
     for worksheet_name, spec in QUALITY_SPECS.items():
-        rows = build_signals_sheet.read_records(sheet, worksheet_name)
+        rows = read_with_retry(
+            worksheet_name,
+            lambda name=worksheet_name: build_signals_sheet.read_records(sheet, name),
+        )
         header = build_signals_sheet.RAW_HEADERS[worksheet_name]
         exact_duplicates = duplicate_count(exact_row_key(row, header) for row in rows)
         logical_duplicates = duplicate_count(
@@ -51,7 +79,10 @@ def derived_metrics(sheet):
     lines = ["", "Derived worksheet metrics", ""]
     for worksheet_name in DERIVED_WORKSHEETS:
         try:
-            rows = read_records(sheet, worksheet_name)
+            rows = read_with_retry(
+                worksheet_name,
+                lambda name=worksheet_name: read_records(sheet, name),
+            )
         except Exception:
             rows = []
         lines.append(f"- {worksheet_name}: {len(rows)} rows")

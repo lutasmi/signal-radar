@@ -1,0 +1,3 @@
+transaction_id,committee_id,committee_name,contributor_name,contributor_employer,contributor_occupation,contributor_city,contributor_state,contribution_receipt_date,contribution_receipt_amount,two_year_transaction_period,memo_text,signal_types,source_url
+fec_1,C00000001,DEFENSE PAC,JANE EXECUTIVE,ORBITAL SYSTEMS INC,CEO,ARLINGTON,VA,2026-01-10,1000,2026,,POLITICAL_CONTRIBUTION;PAC_CONTRIBUTION;EXECUTIVE_CONTRIBUTION,https://www.fec.gov/data/receipts/
+fec_2,C00000001,DEFENSE PAC,JOHN EXECUTIVE,ORBITAL SYSTEMS INC,CFO,ARLINGTON,VA,2026-01-12,1500,2026,,POLITICAL_CONTRIBUTION;PAC_CONTRIBUTION;EXECUTIVE_CONTRIBUTION,https://www.fec.gov/data/receipts/

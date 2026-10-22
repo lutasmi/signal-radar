@@ -1,0 +1,3 @@
+opportunity_id,opportunity_number,title,agency_code,agency,open_date,close_date,opportunity_status,document_type,cfda_list,signal_type,source_url
+grant_1,DE-FOA-0001,Advanced energy manufacturing grants,DOE-GFO,Golden Field Office,2026-01-06,2026-03-01,posted,synopsis,81.001,GRANT_OPPORTUNITY,https://www.grants.gov/search-results-detail/grant_1
+grant_2,DE-FOA-0002,Advanced energy manufacturing forecast,DOE-GFO,Golden Field Office,2026-01-13,2026-04-01,forecasted,forecast,81.002,GRANT_FORECAST,https://www.grants.gov/search-results-detail/grant_2

@@ -49,6 +49,11 @@ FIELDNAMES = [
 ]
 
 
+def default_transaction_period(today=None):
+    today = today or date.today()
+    return today.year if today.year % 2 == 0 else today.year + 1
+
+
 def normalize_contribution(row):
     signal_types = ["POLITICAL_CONTRIBUTION"]
     if row.get("committee_id"):
@@ -97,10 +102,9 @@ def default_min_date(period):
 
 
 def default_max_date(period):
-    current_year = date.today().year
-    if period >= current_year:
-        return f"{period}-12-31"
-    return f"{period}-12-31"
+    today = date.today()
+    period_end = date(period, 12, 31)
+    return min(today, period_end).isoformat()
 
 
 def fetch_pages(
@@ -150,7 +154,7 @@ def parse_args():
     parser.add_argument("--api-key", default="")
     parser.add_argument("--api-key-env", default="FEC_API_KEY")
     parser.add_argument("--use-demo-key", action="store_true")
-    parser.add_argument("--period", type=int, default=2026)
+    parser.add_argument("--period", type=int, default=default_transaction_period())
     parser.add_argument("--min-date", default="")
     parser.add_argument("--max-date", default="")
     parser.add_argument("--per-page", type=int, default=DEFAULT_PER_PAGE)

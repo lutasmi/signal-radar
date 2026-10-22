@@ -1,0 +1,199 @@
+"""Daily price history with a local CSV cache (data/reference/prices/).
+
+Source: Yahoo Finance chart API (query1, fallback query2). Adjusted closes are
+used so returns include splits/dividends. The cache is persisted between
+GitHub Actions runs with actions/cache, so after the first backfill only a
+short recent window is downloaded per ticker.
+"""
+
+import bisect
+import csv
+import time
+from datetime import date, datetime, timedelta, timezone
+from pathlib import Path
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+PRICE_DIR = PROJECT_ROOT / "data" / "reference" / "prices"
+BENCHMARK = "SPY"
+
+YAHOO_URLS = [
+    "https://query1.finance.yahoo.com/v8/finance/chart/{symbol}",
+    "https://query2.finance.yahoo.com/v8/finance/chart/{symbol}",
+]
+HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/125.0 Safari/537.36"
+    ),
+    "Accept": "application/json",
+}
+
+
+def yahoo_symbol(ticker):
+    return ticker.strip().upper().replace(".", "-").replace("/", "-")
+
+
+def last_weekday(today=None):
+    day = today or datetime.now(timezone.utc).date()
+    while day.weekday() >= 5:
+        day -= timedelta(days=1)
+    return day
+
+
+class PriceStore:
+    def __init__(self, session=None, cache_dir=PRICE_DIR, refresh=True, histories=None, today=None):
+        self.session = session
+        self.cache_dir = Path(cache_dir)
+        self.refresh = refresh and session is not None
+        self.today = today or datetime.now(timezone.utc).date()
+        self._series = {}
+        self.failed = set()
+        self.downloads = 0
+        if histories:
+            for ticker, points in histories.items():
+                self._set(ticker, points)
+
+    # storage -------------------------------------------------------------
+    def _set(self, ticker, points):
+        points = sorted({d: p for d, p in points if p and p > 0}.items())
+        self._series[ticker.upper()] = ([d for d, _ in points], [p for _, p in points])
+
+    def _path(self, ticker):
+        return self.cache_dir / f"{yahoo_symbol(ticker)}.csv"
+
+    def _read_cache(self, ticker):
+        path = self._path(ticker)
+        if not path.exists():
+            return []
+        points = []
+        with path.open("r", encoding="utf-8") as f:
+            for row in csv.DictReader(f):
+                try:
+                    points.append((date.fromisoformat(row["date"]), float(row["adjclose"])))
+                except (KeyError, ValueError):
+                    continue
+        return points
+
+    def _write_cache(self, ticker):
+        dates, prices = self._series[ticker]
+        self.cache_dir.mkdir(parents=True, exist_ok=True)
+        with self._path(ticker).open("w", newline="", encoding="utf-8") as f:
+            writer = csv.writer(f, lineterminator="\n")
+            writer.writerow(["date", "adjclose"])
+            for d, p in zip(dates, prices):
+                writer.writerow([d.isoformat(), f"{p:.4f}"])
+
+    # download ------------------------------------------------------------
+    def _download(self, ticker, range_="5y"):
+        params = {"range": range_, "interval": "1d", "includeAdjustedClose": "true"}
+        last_error = None
+        for attempt in range(3):
+            for url in YAHOO_URLS:
+                try:
+                    response = self.session.get(
+                        url.format(symbol=yahoo_symbol(ticker)),
+                        params=params,
+                        headers=HEADERS,
+                        timeout=30,
+                    )
+                    if response.status_code == 404:
+                        return []
+                    if response.status_code == 429:
+                        raise RuntimeError("HTTP 429")
+                    response.raise_for_status()
+                    result = (response.json().get("chart", {}).get("result") or [None])[0]
+                    if not result or not result.get("timestamp"):
+                        return []
+                    stamps = result["timestamp"]
+                    indicators = result.get("indicators", {})
+                    adj = (indicators.get("adjclose") or [{}])[0].get("adjclose")
+                    close = (indicators.get("quote") or [{}])[0].get("close")
+                    values = adj or close or []
+                    offset = result.get("meta", {}).get("gmtoffset", 0) or 0
+                    points = []
+                    for stamp, value in zip(stamps, values):
+                        if value is None:
+                            continue
+                        day = datetime.fromtimestamp(stamp + offset, tz=timezone.utc).date()
+                        points.append((day, float(value)))
+                    self.downloads += 1
+                    return points
+                except Exception as exc:  # try next host / retry
+                    last_error = exc
+            time.sleep(1.5 * (attempt + 1))
+        raise RuntimeError(f"price download failed for {ticker}: {last_error}")
+
+    def load(self, ticker, need_until=None):
+        """Load a ticker's history, refreshing the cache when it is stale."""
+        ticker = ticker.upper().strip()
+        if not ticker or ticker in self.failed:
+            return False
+        if ticker not in self._series:
+            cached = self._read_cache(ticker)
+            if cached:
+                self._set(ticker, cached)
+        need_until = need_until or last_weekday(self.today) - timedelta(days=1)
+        dates = self._series.get(ticker, ([], []))[0]
+        stale = not dates or dates[-1] < need_until
+        if stale and self.refresh:
+            path = self._path(ticker)
+            recently_tried = path.exists() and time.time() - path.stat().st_mtime < 6 * 3600
+            if not (dates and recently_tried):
+                try:
+                    range_ = "3mo" if dates and (self.today - dates[-1]).days < 80 else "5y"
+                    fresh = self._download(ticker, range_)
+                    if fresh:
+                        merged = dict(zip(*self._series.get(ticker, ([], []))))
+                        merged.update(dict(fresh))
+                        self._set(ticker, merged.items())
+                        self._write_cache(ticker)
+                    elif dates:
+                        self._path(ticker).touch()
+                except Exception as exc:
+                    print(f"WARNING: {exc}")
+                    self.failed.add(ticker)
+                time.sleep(0.15)
+        return ticker in self._series and bool(self._series[ticker][0])
+
+    # queries -------------------------------------------------------------
+    def has(self, ticker):
+        return ticker.upper() in self._series and bool(self._series[ticker.upper()][0])
+
+    def dates(self, ticker):
+        return self._series.get(ticker.upper(), ([], []))[0]
+
+    def on_or_after(self, ticker, day):
+        dates, prices = self._series.get(ticker.upper(), ([], []))
+        i = bisect.bisect_left(dates, day)
+        if i >= len(dates):
+            return None, None
+        return dates[i], prices[i]
+
+    def after(self, ticker, day):
+        """First trading day strictly after `day` (the day you could act on news)."""
+        return self.on_or_after(ticker, day + timedelta(days=1))
+
+    def on_or_before(self, ticker, day):
+        dates, prices = self._series.get(ticker.upper(), ([], []))
+        i = bisect.bisect_right(dates, day) - 1
+        if i < 0:
+            return None, None
+        return dates[i], prices[i]
+
+    def latest(self, ticker):
+        dates, prices = self._series.get(ticker.upper(), ([], []))
+        if not dates:
+            return None, None
+        return dates[-1], prices[-1]
+
+
+def pct(a, b):
+    if not a or not b:
+        return None
+    return (b / a - 1.0) * 100.0
+
+
+def fmt_pct(value, digits=1):
+    if value is None:
+        return "n/d"
+    return f"{value:+.{digits}f}%"

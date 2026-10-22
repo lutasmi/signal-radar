@@ -73,6 +73,8 @@ def recency_weight(row, run_date, config):
     current_date = parse_date(run_date)
     if last_date is None or current_date is None:
         return 0, ""
+    if last_date > current_date:
+        return 0, ""
 
     age_days = max((current_date - last_date).days, 0)
     for bucket in sorted(config["recency"], key=lambda item: item["max_days"]):

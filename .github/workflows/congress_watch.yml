@@ -1,0 +1,139 @@
+name: Congress watch
+
+# Fast loop for congressional trades: every 2 hours it pulls new official PTR
+# filings (House Clerk + Senate eFD), updates the copy portfolios and sends
+# Telegram alerts. Use "Run workflow" with backfill_since to load history.
+
+on:
+  workflow_dispatch:
+    inputs:
+      backfill_since:
+        description: "Backfill filings since YYYY-MM-DD (e.g. 2024-01-01). Empty = last 7 days."
+        required: false
+        default: ""
+        type: string
+      max_vision:
+        description: "Max new scanned filings read with Claude during a backfill (cost control)"
+        required: false
+        default: "25"
+        type: string
+      alerts_dry_run:
+        description: "Print alerts instead of sending them to Telegram"
+        required: false
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
+  schedule:
+    - cron: "23 */2 * * *"
+
+permissions:
+  contents: read
+  actions: write
+
+concurrency:
+  group: signal-radar-sheets
+  cancel-in-progress: false
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install Python dependencies
+        run: python3 -m pip install -r requirements.txt
+
+      - name: Restore reference cache (committees, SIC codes, prices)
+        uses: actions/cache/restore@v4
+        with:
+          path: data/reference
+          key: reference-${{ github.run_id }}
+          restore-keys: |
+            reference-
+
+      - name: Write Google credentials
+        env:
+          GOOGLE_CREDENTIALS_JSON: ${{ secrets.GOOGLE_CREDENTIALS_JSON }}
+          GOOGLE_SHEETS_ID: ${{ secrets.GOOGLE_SHEETS_ID }}
+        run: |
+          set +x
+          test -n "$GOOGLE_CREDENTIALS_JSON"
+          test -n "$GOOGLE_SHEETS_ID"
+          printf '%s' "$GOOGLE_CREDENTIALS_JSON" > credentials.json
+          printf 'GOOGLE_SHEETS_ID=%s\n' "$GOOGLE_SHEETS_ID" > .env
+
+      - name: Collect Congress PTR (House Clerk + Senate eFD)
+        id: collect
+        continue-on-error: true
+        env:
+          SEC_USER_AGENT: ${{ secrets.SEC_USER_AGENT }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          MAX_VISION: ${{ inputs.max_vision }}
+          BACKFILL_SINCE: ${{ inputs.backfill_since }}
+        run: |
+          if [ -n "$BACKFILL_SINCE" ]; then
+            python3 collectors/collect_congress_ptr.py --since "$BACKFILL_SINCE" --max-filings 5000 --delay 0.2 --max-vision "${MAX_VISION:-25}"
+          else
+            python3 collectors/collect_congress_ptr.py --days 7
+          fi
+
+      - name: Load Congress PTR into Google Sheets
+        if: ${{ steps.collect.outcome == 'success' }}
+        run: python3 loaders/load_congress_ptr_csv_to_sheets.py
+
+      - name: Build scorecard and copy portfolios
+        id: tracker
+        continue-on-error: true
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          # Weekly digest on the Monday 06:xx UTC scheduled run.
+          if [ "${{ github.event_name }}" = "schedule" ] && [ "$(date -u +%u)" = "1" ] && [ "$(date -u +%H)" = "06" ]; then
+            python3 scripts/build_tracker.py --digest
+          else
+            python3 scripts/build_tracker.py
+          fi
+
+      - name: Send congress alerts
+        if: ${{ always() }}
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          DRY_RUN: ${{ inputs.alerts_dry_run }}
+        run: |
+          if [ "$DRY_RUN" = "true" ]; then
+            python3 scripts/send_congress_alerts.py --dry-run
+          else
+            python3 scripts/send_congress_alerts.py
+          fi
+
+      - name: Save reference cache
+        if: ${{ always() }}
+        continue-on-error: true
+        uses: actions/cache/save@v4
+        with:
+          path: data/reference
+          key: reference-${{ github.run_id }}
+
+      - name: Keep scheduled workflows alive
+        if: ${{ always() }}
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh workflow enable congress_watch.yml --repo "$GITHUB_REPOSITORY"
+          gh workflow enable daily_radar.yml --repo "$GITHUB_REPOSITORY"

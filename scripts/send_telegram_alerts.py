@@ -17,10 +17,11 @@ ensure_project_runtime(
 import requests
 from dotenv import load_dotenv
 
-from radar.records import get_value, rows_to_dicts, stable_id
+from radar.records import get_value, rows_to_dicts, split_semicolon, stable_id
 
 
 REVIEW_QUEUE_WORKSHEET_NAME = "review_queue"
+SIGNALS_WORKSHEET_NAME = "signals"
 ALERT_LOG_WORKSHEET_NAME = "telegram_alert_log"
 ALERT_LOG_HEADER = [
     "alert_id",
@@ -67,6 +68,8 @@ def make_alert_id(row):
 
 
 def should_alert(row):
+    if get_value(row, "status") == "CLOSED":
+        return False
     return (
         get_value(row, "status") == "NEW"
         or get_value(row, "review_today") == "YES"
@@ -74,19 +77,209 @@ def should_alert(row):
     )
 
 
-def build_message(row):
-    subject = get_value(row, "ticker") or get_value(row, "entity_name") or "Opportunity"
-    lines = [
-        f"Signal Radar: {get_value(row, 'score_band') or 'UNSCORED'}",
-        "",
-        f"Ticker / Entity: {subject}",
-        f"Status: {get_value(row, 'status')}",
-        f"Score: {get_value(row, 'score')}",
-        f"Reason: {get_value(row, 'score_reason') or get_value(row, 'priority_reason')}",
-        f"Sources: {get_value(row, 'sources')}",
-        "",
-        "Review: Open Google Sheets",
+def build_signal_lookup(signals):
+    return {
+        get_value(signal, "signal_id"): signal
+        for signal in signals or []
+        if get_value(signal, "signal_id")
+    }
+
+
+def unique_join(values, fallback="No disponible"):
+    seen = []
+    for value in values:
+        value = (value or "").strip()
+        if value and value not in seen:
+            seen.append(value)
+    return "; ".join(seen) if seen else fallback
+
+
+def signal_asset(signal):
+    ticker = get_value(signal, "ticker")
+    entity = get_value(signal, "entity_name")
+    if ticker and entity:
+        return f"{ticker} - {entity}"
+    return ticker or entity
+
+
+def signal_action(signal):
+    signal_type = get_value(signal, "signal_type")
+    if signal_type in {"PTR_BUY", "PTR_BUY_CONFLICT", "INSIDER_BUY"}:
+        return "compra"
+    if signal_type == "PTR_SELL":
+        return "vende"
+    if signal_type in {
+        "CONTRACT",
+        "CONTRACT_AWARD_NOTICE",
+    }:
+        return "adjudica contrato a"
+    if signal_type in {
+        "CONTRACT_OPPORTUNITY",
+        "CONTRACT_PRE_SOLICITATION",
+        "CONTRACT_SOLE_SOURCE",
+    }:
+        return "publica oportunidad para"
+    if signal_type in {"BILL_INTRODUCED", "COMMITTEE_ACTION", "LEGISLATIVE_ACTION"}:
+        return "mueve iniciativa sobre"
+    if signal_type in {
+        "RULE_PROPOSED",
+        "RULE_FINAL",
+        "AGENCY_NOTICE",
+        "EXECUTIVE_ACTION",
+        "REGULATORY_CATALYST",
+    }:
+        return "publica accion regulatoria sobre"
+    if signal_type.startswith("LOBBY_"):
+        return "registra lobby para"
+    if signal_type in {
+        "MATERIAL_EVENT_8K",
+        "MATERIAL_CONTRACT_8K",
+        "MAJOR_HOLDER_ENTRY",
+        "ACTIVIST_POSITION",
+        "FORM144_PLANNED_SALE",
+        "INSTITUTIONAL_POSITION_13F",
+    }:
+        return "presenta evento SEC sobre"
+    if signal_type in {
+        "POLITICAL_CONTRIBUTION",
+        "PAC_CONTRIBUTION",
+        "EXECUTIVE_CONTRIBUTION",
+    }:
+        return "aporta a"
+    if signal_type in {"GRANT_FORECAST", "GRANT_OPPORTUNITY"}:
+        return "abre financiacion para"
+    return "activa"
+
+
+def summarize_signal(signal):
+    signal_date = get_value(signal, "signal_date")
+    actor = get_value(signal, "actor_name") or "Actor desconocido"
+    actor_type = get_value(signal, "actor_type")
+    action = signal_action(signal)
+    asset = signal_asset(signal) or "Activo/entidad desconocida"
+    amount = get_value(signal, "amount")
+    source = get_value(signal, "source")
+
+    actor_label = f"{actor} ({actor_type})" if actor_type else actor
+    amount_text = f" | importe: {amount}" if amount else ""
+    date_text = f"{signal_date} | " if signal_date else ""
+    source_text = f" | fuente: {source}" if source else ""
+    return f"{date_text}{actor_label} {action} {asset}{amount_text}{source_text}"
+
+
+def linked_signals(row, signal_lookup):
+    signals = []
+    for signal_id in split_semicolon(get_value(row, "signal_ids")):
+        signal = signal_lookup.get(signal_id)
+        if signal:
+            signals.append(signal)
+    return signals
+
+
+def buyer_text(row, signals):
+    buyers = [
+        get_value(signal, "actor_name")
+        for signal in signals
+        if get_value(signal, "signal_type") in {"PTR_BUY", "PTR_BUY_CONFLICT", "INSIDER_BUY"}
     ]
+    if buyers:
+        return unique_join(buyers)
+
+    actors = [get_value(signal, "actor_name") for signal in signals]
+    return unique_join(actors)
+
+
+def purchase_text(row, signals):
+    buy_assets = [
+        signal_asset(signal)
+        for signal in signals
+        if get_value(signal, "signal_type") in {"PTR_BUY", "PTR_BUY_CONFLICT", "INSIDER_BUY"}
+    ]
+    if buy_assets:
+        return unique_join(buy_assets)
+
+    subject = get_value(row, "ticker") or get_value(row, "entity_name")
+    if subject:
+        return subject
+
+    return unique_join(signal_asset(signal) for signal in signals)
+
+
+def scoring_lines(row):
+    score_reason = get_value(row, "score_reason")
+    if not score_reason:
+        return ["No hay explicacion de scoring disponible."]
+    return [
+        humanize_score_reason(part.strip())
+        for part in score_reason.split(";")
+        if part.strip()
+    ]
+
+
+def humanize_score_reason(reason):
+    if reason.startswith("priority "):
+        return reason.replace("priority ", "Prioridad ", 1).replace(" +", ": +")
+    if reason.startswith("status "):
+        return reason.replace("status ", "Estado ", 1).replace(" +", ": +")
+    if reason.startswith("source diversity "):
+        return reason.replace("source diversity ", "Diversidad de fuentes: ", 1)
+    if reason.startswith("review_today "):
+        return reason.replace("review_today ", "Revisar hoy: ", 1)
+    if reason.startswith("recency <= "):
+        return reason.replace("recency <= ", "Recencia <= ", 1)
+    if " +" in reason:
+        label, points = reason.rsplit(" +", 1)
+        return f"Tipo/senal {label}: +{points}"
+    return reason
+
+
+def evidence_lines(signals, max_lines=3):
+    lines = [summarize_signal(signal) for signal in signals[:max_lines]]
+    if len(signals) > max_lines:
+        lines.append(f"... y {len(signals) - max_lines} senales vinculadas mas")
+    return lines
+
+
+def build_message(row, signal_lookup=None):
+    signal_lookup = signal_lookup or {}
+    signals = linked_signals(row, signal_lookup)
+    subject = get_value(row, "ticker") or get_value(row, "entity_name") or "Oportunidad"
+    lines = [
+        f"Signal Radar - {get_value(row, 'score_band') or 'UNSCORED'}",
+        "",
+        f"Asunto: {subject}",
+        f"Quien compra / actua: {buyer_text(row, signals)}",
+        f"Que compra / recibe / queda afectado: {purchase_text(row, signals)}",
+        "",
+        "Vinculacion / relevancia:",
+        f"- {get_value(row, 'priority_reason') or get_value(row, 'summary')}",
+        f"- Tipo de vinculo: {get_value(row, 'opportunity_type')}",
+        f"- Evidencia: {get_value(row, 'evidence_count')} elementos de {get_value(row, 'sources')}",
+        "",
+        "Detalle:",
+    ]
+    evidence = evidence_lines(signals)
+    if evidence:
+        lines.extend(f"- {line}" for line in evidence)
+    else:
+        lines.append("- No hay detalle de senales vinculadas en la fila local.")
+
+    lines.extend(
+        [
+            "",
+            "Scoring:",
+            f"- Total: {get_value(row, 'score')} ({get_value(row, 'score_band')})",
+            "- Metodo: suma configurable de prioridad, estado, diversidad de fuentes, tipo de oportunidad, tipos de senal y recencia.",
+        ]
+    )
+    lines.extend(f"- {line}" for line in scoring_lines(row))
+    lines.extend(
+        [
+            "",
+            f"Estado: {get_value(row, 'status')}",
+            "Revision: abrir Google Sheets",
+        ]
+    )
     return "\n".join(lines)
 
 
@@ -121,7 +314,7 @@ def existing_alert_ids(alert_rows):
     }
 
 
-def pending_alerts(review_rows, sent_alert_ids):
+def pending_alerts(review_rows, sent_alert_ids, signal_lookup=None):
     alerts = []
     for row in review_rows:
         if not should_alert(row):
@@ -129,7 +322,7 @@ def pending_alerts(review_rows, sent_alert_ids):
         alert_id = make_alert_id(row)
         if alert_id in sent_alert_ids:
             continue
-        alerts.append((alert_id, row, build_message(row)))
+        alerts.append((alert_id, row, build_message(row, signal_lookup=signal_lookup)))
     return alerts
 
 
@@ -150,25 +343,9 @@ def send_telegram_message(token, chat_id, message):
 
 
 def append_alert_log(sheet, records):
-    from radar.sheets import open_or_create_worksheet
+    from radar.sheets import append_records
 
-    if not records:
-        return
-    worksheet = open_or_create_worksheet(
-        sheet,
-        ALERT_LOG_WORKSHEET_NAME,
-        row_count=len(records),
-        column_count=len(ALERT_LOG_HEADER),
-    )
-    existing_values = worksheet.get_all_values()
-    if not existing_values:
-        worksheet.append_row(ALERT_LOG_HEADER, value_input_option="RAW")
-    elif existing_values[0] != ALERT_LOG_HEADER:
-        worksheet.insert_row(ALERT_LOG_HEADER, 1, value_input_option="RAW")
-    worksheet.append_rows(
-        [[record[column] for column in ALERT_LOG_HEADER] for record in records],
-        value_input_option="RAW",
-    )
+    append_records(sheet, ALERT_LOG_WORKSHEET_NAME, ALERT_LOG_HEADER, records)
 
 
 def alert_log_record(alert_id, row, message, sent_at):
@@ -190,8 +367,15 @@ def send_alerts(dry_run=False):
     review_rows = rows_to_dicts(
         sheet.worksheet(REVIEW_QUEUE_WORKSHEET_NAME).get_all_values()
     )
+    import gspread
+
+    try:
+        signals = rows_to_dicts(sheet.worksheet(SIGNALS_WORKSHEET_NAME).get_all_values())
+    except gspread.exceptions.WorksheetNotFound:
+        signals = []
+    signal_lookup = build_signal_lookup(signals)
     sent_ids = existing_alert_ids(alert_log_records(sheet))
-    alerts = pending_alerts(review_rows, sent_ids)
+    alerts = pending_alerts(review_rows, sent_ids, signal_lookup=signal_lookup)
 
     print(f"Alert candidates: {len(alerts)}")
     if dry_run:
@@ -235,7 +419,10 @@ def validate_dry_run_logic():
             "entity_name": "ABC Corp",
             "score_reason": "priority MEDIUM +30",
             "priority_reason": "Test priority",
+            "opportunity_type": "TICKER_ACTIVITY",
+            "evidence_count": "2",
             "sources": "capitol_trades",
+            "signal_ids": "signal_1; signal_2",
         },
         {
             "review_id": "review_2",
@@ -247,7 +434,10 @@ def validate_dry_run_logic():
             "entity_name": "XYZ Corp",
             "score_reason": "priority LOW +10",
             "priority_reason": "Test priority",
+            "opportunity_type": "TICKER_ACTIVITY",
+            "evidence_count": "1",
             "sources": "sec_form4",
+            "signal_ids": "signal_3",
         },
         {
             "review_id": "review_3",
@@ -259,15 +449,66 @@ def validate_dry_run_logic():
             "entity_name": "High Corp",
             "score_reason": "priority HIGH +50",
             "priority_reason": "Test priority",
+            "opportunity_type": "CROSS_SOURCE",
+            "evidence_count": "3",
             "sources": "capitol_trades;sec_form4",
+            "signal_ids": "signal_4",
+        },
+        {
+            "review_id": "review_4",
+            "status": "CLOSED",
+            "review_today": "NO",
+            "score": "99",
+            "score_band": "HIGH",
+            "ticker": "OLD",
+            "entity_name": "Closed Corp",
+            "score_reason": "priority HIGH +50",
+            "priority_reason": "Closed priority",
+            "opportunity_type": "CROSS_SOURCE",
+            "evidence_count": "3",
+            "sources": "capitol_trades;sec_form4",
+            "signal_ids": "signal_4",
         },
     ]
+    signals = [
+        {
+            "signal_id": "signal_1",
+            "signal_date": "2026-01-10",
+            "signal_type": "PTR_BUY",
+            "ticker": "ABC",
+            "entity_name": "ABC Corp",
+            "actor_name": "Rep. Example",
+            "actor_type": "politician",
+            "amount": "15K-50K",
+            "source": "capitol_trades",
+        },
+        {
+            "signal_id": "signal_2",
+            "signal_date": "2026-01-11",
+            "signal_type": "INSIDER_BUY",
+            "ticker": "ABC",
+            "entity_name": "ABC Corp",
+            "actor_name": "Jane Insider",
+            "actor_type": "insider",
+            "amount": "120000",
+            "source": "sec_form4",
+        },
+    ]
+    signal_lookup = build_signal_lookup(signals)
     sent_ids = {make_alert_id(rows[0])}
-    alerts = pending_alerts(rows, sent_ids)
+    alerts = pending_alerts(rows, sent_ids, signal_lookup=signal_lookup)
     if len(alerts) != 1 or alerts[0][1]["review_id"] != "review_3":
         raise ValueError("Telegram deduplication failed")
-    message = build_message(rows[0])
-    for expected in ["Signal Radar", "ABC", "Score: 72", "Open Google Sheets"]:
+    message = build_message(rows[0], signal_lookup=signal_lookup)
+    for expected in [
+        "Signal Radar",
+        "Quien compra / actua: Rep. Example; Jane Insider",
+        "Que compra / recibe / queda afectado: ABC - ABC Corp",
+        "Vinculacion / relevancia:",
+        "Scoring:",
+        "Prioridad MEDIUM: +30",
+        "abrir Google Sheets",
+    ]:
         if expected not in message:
             raise ValueError(f"Telegram message missing expected text: {expected}")
     return True

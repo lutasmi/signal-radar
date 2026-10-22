@@ -11,3 +11,4 @@ tmp_js/
 data/*.csv
 data/raw/
 data/processed/
+data/reference/

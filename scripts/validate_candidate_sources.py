@@ -216,6 +216,8 @@ def validate_sec_edgar_additional():
 
 
 def validate_fec():
+    if collect_fec.default_transaction_period() % 2 != 0:
+        raise ValueError("fec default transaction period must be even")
     raw = {
         "transaction_id": "SA11AI.123",
         "committee_id": "C00000000",

@@ -1,0 +1,3 @@
+bill_id,congress,bill_type,bill_number,title,origin_chamber,introduced_date,latest_action_date,latest_action_text,sponsor_name,sponsor_bioguide_id,policy_area,signal_types,source_url
+119-hr-100,119,HR,100,Defense Supply Chain Resilience Act,House,2026-01-03,2026-01-08,Referred to the Committee on Armed Services.,Example Member,X000001,Armed Forces,BILL_INTRODUCED;LEGISLATIVE_ACTION;COMMITTEE_ACTION,https://api.congress.gov/v3/bill/119/hr/100
+119-s-200,119,S,200,Advanced Energy Manufacturing Act,Senate,2026-01-04,2026-01-09,Read twice and referred to the Committee on Energy and Natural Resources.,Example Senator,Y000001,Energy,BILL_INTRODUCED;LEGISLATIVE_ACTION;COMMITTEE_ACTION,https://api.congress.gov/v3/bill/119/s/200

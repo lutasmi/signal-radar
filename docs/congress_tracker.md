@@ -1,0 +1,76 @@
+# Congress tracker (estilo "Pelosi ETF")
+
+Sistema de alertas y carteras réplica a partir de las operaciones bursátiles que
+declaran los congresistas de EE. UU. (STOCK Act). Todo se ejecuta en GitHub
+Actions y escribe en Google Sheets; las alertas llegan por Telegram.
+
+## Flujo (`.github/workflows/congress_watch.yml`, cada 2 horas)
+
+```text
+House Clerk (índice + PDFs)  ─┐
+Senate eFD (HTML)            ─┼─> collectors/collect_congress_ptr.py
+Claude visión (escaneados)   ─┘     + comités (congress-legislators) + sector (lista curada / SIC SEC)
+                                    + conflicto comité↔sector (config/conflict_sectors.json)
+        -> data/congress_ptr_latest.csv -> raw_congress_ptr (Sheets)
+        -> scripts/build_tracker.py   -> politician_scorecard, replica_holdings,
+                                         copy_portfolio_summary / _nav / _positions
+                                         (+ resumen semanal los lunes, con comentario de Claude)
+        -> scripts/send_congress_alerts.py -> conflict_trades, ptr_manual_review,
+                                         agent_review (investigación de Claude) y Telegram
+```
+
+El radar diario (`daily_radar.yml`) sigue usando `raw_congress_ptr` para cruzar con
+contratos, insiders y catalizadores (`PTR_BUY_CONFLICT` en `signals`).
+
+## Alertas
+
+| Etiqueta | Cuándo |
+|---|---|
+| 🚨 CONFLICTO | Compra de un miembro de un comité con jurisdicción sobre el sector (score ≥ 50) |
+| 👀 SEGUIDO | Cualquier compra o venta de un político de `config/tracker.json` |
+| 🏆 TOP | Compra de uno de los mejores del `politician_scorecard` |
+| 🧲 CLUSTER | 3+ congresistas compran el mismo ticker en 30 días |
+| 📄 PAPEL | Un político seguido presenta una declaración escaneada que no se pudo leer |
+
+Cada alerta incluye importe, titular, retraso de la declaración, movimiento del precio
+desde la operación y desde la declaración, otros compradores, historial del político,
+si la cartera réplica compra y, si hay API key, la evaluación del agente (sospecha 1-5,
+tesis, catalizadores y fuentes). Deduplicadas en `telegram_alert_log`.
+
+## Agente (Claude)
+
+Opcional: requiere el secret `ANTHROPIC_API_KEY`. Sin él todo lo demás funciona.
+
+* **Visión**: lee declaraciones escaneadas de la Cámara (primero las de políticos seguidos).
+  Resultado cacheado por DocID; nunca se paga dos veces. Filas marcadas `extraction = claude_vision`.
+* **Investigación**: para cada declaración que dispara alerta, busca en la web contratos,
+  actividad del comité, regulación y noticias, y escribe en `agent_review`.
+* **Comentario semanal** en el resumen de los lunes (solo con las cifras calculadas).
+* Límites en `config/tracker.json -> agent` (modelo, revisiones y escaneos por ejecución,
+  búsquedas por revisión). Los cálculos numéricos nunca los hace el modelo.
+
+## Carteras réplica
+
+Definidas en `config/tracker.json -> portfolios` (`trumpito`: seguidos + conflictos;
+`pelosi`; `congreso`: todo el Congreso como referencia).
+
+* Entrada al cierre del primer día hábil después de la fecha de declaración (sin mirar al futuro).
+* Salida cuando el político declara la venta del mismo ticker o tras `max_hold_days`.
+* Peso por importe declarado (punto medio del rango) con tope `max_lot_usd`.
+* Índice diario ponderado en el tiempo (base 100) frente a SPY.
+* Las opciones se tratan como exposición al subyacente.
+
+## Puesta en marcha
+
+1. Secrets de GitHub: `GOOGLE_CREDENTIALS_JSON`, `GOOGLE_SHEETS_ID`, `TELEGRAM_BOT_TOKEN`,
+   `TELEGRAM_CHAT_ID`, `SEC_USER_AGENT` y, opcional, `ANTHROPIC_API_KEY`.
+2. Actions → Congress watch → Run workflow con `backfill_since = 2024-01-01`
+   (`max_vision` limita cuántos escaneados lee Claude en la carga histórica).
+3. A partir de ahí corre solo cada 2 horas; el propio workflow evita que GitHub lo desactive.
+
+## Limitaciones conocidas
+
+* La ley permite declarar hasta 45 días después: ninguna alerta puede ser en tiempo real.
+* Senate eFD bloquea algunos rangos de IP fuera de EE. UU.; desde GitHub Actions debería funcionar.
+* Precios de Yahoo Finance (no oficial): si falla un ticker se omite en esa ejecución.
+* Simulación con datos públicos; no es una recomendación de inversión.

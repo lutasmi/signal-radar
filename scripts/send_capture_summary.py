@@ -1,5 +1,6 @@
 import argparse
 import csv
+import glob
 import os
 import sys
 from datetime import datetime, timezone
@@ -19,9 +20,9 @@ from dotenv import load_dotenv
 
 SOURCES = [
     {
-        "name": "Capitol Trades",
-        "env": "CAPITOL_TRADES_OUTCOME",
-        "csv": Path("data/capitol_trades_latest.csv"),
+        "name": "Congress PTR (House + Senate)",
+        "env": "CONGRESS_PTR_OUTCOME",
+        "csv": Path("data/congress_ptr_latest.csv"),
     },
     {
         "name": "SEC Form 4",
@@ -32,6 +33,41 @@ SOURCES = [
         "name": "USASpending",
         "env": "USASPENDING_OUTCOME",
         "csv": Path("data/usaspending_latest.csv"),
+    },
+    {
+        "name": "SAM.gov",
+        "env": "SAM_GOV_OUTCOME",
+        "pattern": "data/processed/sam_gov/sam_gov_*.csv",
+    },
+    {
+        "name": "Congress.gov",
+        "env": "CONGRESS_GOV_OUTCOME",
+        "pattern": "data/processed/congress_gov/congress_gov_*.csv",
+    },
+    {
+        "name": "Federal Register",
+        "env": "FEDERAL_REGISTER_OUTCOME",
+        "pattern": "data/processed/federal_register/federal_register_*.csv",
+    },
+    {
+        "name": "LDA.gov",
+        "env": "LDA_GOV_OUTCOME",
+        "pattern": "data/processed/lda_gov/lda_gov_*.csv",
+    },
+    {
+        "name": "SEC EDGAR additional",
+        "env": "SEC_EDGAR_ADDITIONAL_OUTCOME",
+        "pattern": "data/processed/sec_edgar_additional/sec_edgar_additional_*.csv",
+    },
+    {
+        "name": "FEC",
+        "env": "FEC_OUTCOME",
+        "pattern": "data/processed/fec/fec_*.csv",
+    },
+    {
+        "name": "Grants.gov",
+        "env": "GRANTS_GOV_OUTCOME",
+        "pattern": "data/processed/grants_gov/grants_gov_*.csv",
     },
 ]
 
@@ -47,15 +83,23 @@ def count_csv_records(csv_file):
         return max(sum(1 for _ in csv.reader(f)) - 1, 0)
 
 
+def source_csv(source):
+    if "csv" in source:
+        return source["csv"]
+    matches = sorted(glob.glob(source["pattern"]))
+    return Path(matches[-1]) if matches else None
+
+
 def source_status(source):
     outcome = os.getenv(source["env"], "unknown").strip() or "unknown"
-    records = count_csv_records(source["csv"])
+    csv_file = source_csv(source)
+    records = count_csv_records(csv_file) if csv_file else None
     problems = []
 
     if outcome != "success":
         problems.append(f"collector outcome: {outcome}")
     if outcome == "success" and records is None:
-        problems.append(f"CSV not found: {source['csv']}")
+        problems.append("CSV not found")
 
     return {
         "name": source["name"],
@@ -66,7 +110,9 @@ def source_status(source):
 
 
 def build_capture_summary(statuses=None):
-    statuses = statuses or [source_status(source) for source in SOURCES]
+    statuses = statuses or [
+        source_status(source) for source in SOURCES if os.getenv(source["env"]) is not None
+    ]
     lines = [
         "Signal Radar capture",
         "",

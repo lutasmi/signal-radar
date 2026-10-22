@@ -18,6 +18,24 @@ from scripts import build_signals_sheet
 
 
 QUALITY_SPECS = {
+    build_signals_sheet.RAW_CONGRESS_PTR: {
+        "key_columns": [
+            "filing_id",
+            "owner",
+            "asset_name",
+            "trade_type",
+            "transaction_date",
+            "amount",
+        ],
+        "critical_columns": [
+            "filing_id",
+            "politician",
+            "trade_type",
+            "filing_date",
+            "source_url",
+        ],
+        "date_columns": ["transaction_date", "filing_date"],
+    },
     build_signals_sheet.RAW_CAPITOL_TRADES: {
         "key_columns": [
             "politician",
@@ -69,6 +87,41 @@ QUALITY_SPECS = {
             "source_url",
         ],
         "date_columns": ["period_of_performance_start_date"],
+    },
+    build_signals_sheet.RAW_SAM_GOV: {
+        "key_columns": ["notice_id"],
+        "critical_columns": ["notice_id", "title", "posted_date", "type", "source_url"],
+        "date_columns": ["posted_date", "response_deadline", "archive_date", "award_date"],
+    },
+    build_signals_sheet.RAW_CONGRESS_GOV: {
+        "key_columns": ["bill_id"],
+        "critical_columns": ["bill_id", "title", "latest_action_date", "signal_types", "source_url"],
+        "date_columns": ["introduced_date", "latest_action_date"],
+    },
+    build_signals_sheet.RAW_FEDERAL_REGISTER: {
+        "key_columns": ["document_number"],
+        "critical_columns": ["document_number", "publication_date", "type", "title", "html_url"],
+        "date_columns": ["publication_date"],
+    },
+    build_signals_sheet.RAW_LDA_GOV: {
+        "key_columns": ["filing_uuid"],
+        "critical_columns": ["filing_uuid", "filing_type", "posted_date", "registrant_name", "client_name"],
+        "date_columns": ["posted_date"],
+    },
+    build_signals_sheet.RAW_SEC_EDGAR_ADDITIONAL: {
+        "key_columns": ["form_type", "accession"],
+        "critical_columns": ["accession", "form_type", "signal_type", "company_name", "source_url"],
+        "date_columns": ["filing_date", "updated_at"],
+    },
+    build_signals_sheet.RAW_FEC: {
+        "key_columns": ["transaction_id"],
+        "critical_columns": ["transaction_id", "committee_name", "contributor_name", "contribution_receipt_date"],
+        "date_columns": ["contribution_receipt_date"],
+    },
+    build_signals_sheet.RAW_GRANTS_GOV: {
+        "key_columns": ["opportunity_id"],
+        "critical_columns": ["opportunity_id", "opportunity_number", "title", "agency", "open_date"],
+        "date_columns": ["open_date", "close_date"],
     },
 }
 

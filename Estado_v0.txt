@@ -7,6 +7,13 @@ Detectar señales combinadas entre:
 * Capitol Trades (PTR)
 * SEC Form 4 (insiders)
 * USASpending (contratos federales)
+* SAM.gov Contract Opportunities
+* Congress.gov
+* Federal Register
+* LDA.gov
+* SEC EDGAR adicional
+* FEC
+* Grants.gov
 
 Manteniendo una arquitectura simple:
 
@@ -135,11 +142,18 @@ raw_usaspending
 
 ⸻
 
-Fase 4 consolidada - signals baseline
+Fase 4 consolidada - signals baseline ampliado
 
 raw_capitol_trades
 raw_sec_form4
 raw_usaspending
+raw_sam_gov
+raw_congress_gov
+raw_federal_register
+raw_lda_gov
+raw_sec_edgar_additional
+raw_fec
+raw_grants_gov
 → signals
 
 Estado:
@@ -148,7 +162,7 @@ Estado:
 * La pestaña signals existe.
 * La normalización de signal_date está implementada.
 * Existe validación offline de CSV, idempotencia de loaders y generación determinística de signals.
-* El flujo collectors → CSV → raw sheets → signals fue validado contra Google Sheets real el 2026-06-28.
+* El flujo collectors → CSV → raw sheets → signals fue ampliado con fuentes oficiales validadas localmente y loaders idempotentes.
 * Existe CI mínimo para validación local con fixtures; no ejecuta collectors, loaders ni escrituras en Google Sheets.
 * Existe workflow diario controlado con ejecución manual para collectors → loaders → rebuild_radar usando secretos de GitHub.
 
@@ -171,7 +185,7 @@ Estado:
 
 * scripts/build_cluster_signals_sheet.py existe.
 * La pestaña cluster_signals existe.
-* Detecta actividad repetida por ticker y contratos repetidos por entidad en una ventana simple de 90 días.
+* Detecta actividad repetida por ticker, contratos repetidos por entidad y actividad pública oficial repetida en una ventana simple de 90 días.
 * Cada cluster incluye reason y source_signal_ids para explicar y auditar por qué existe.
 * La generación es idempotente y fue validada contra Google Sheets real el 2026-06-28.
 
@@ -251,6 +265,7 @@ Estado:
 * Conserva review_status y review_note existentes cuando se reconstruye.
 * Añade status NEW/ACTIVE/CLOSED, review_today, first_seen, last_seen, closed_date, score, score_band y score_reason.
 * Envía alertas Telegram deduplicadas usando telegram_alert_log.
+* Los mensajes Telegram explican quién compra o actúa, qué compra o queda afectado, por qué importa y cómo se compone el score.
 * La generación es idempotente y fue validada contra Google Sheets real el 2026-06-28.
 * scripts/rebuild_radar.py reconstruye todas las hojas derivadas hasta review_queue.
 * La lógica común de Sheets, fechas, filas, IDs y deduplicación vive en radar/.
@@ -297,9 +312,37 @@ SEC Form 4
 USASpending
 → raw_usaspending
 
+SAM.gov
+→ raw_sam_gov
+
+Congress.gov
+→ raw_congress_gov
+
+Federal Register
+→ raw_federal_register
+
+LDA.gov
+→ raw_lda_gov
+
+SEC EDGAR adicional
+→ raw_sec_edgar_additional
+
+FEC
+→ raw_fec
+
+Grants.gov
+→ raw_grants_gov
+
 raw_capitol_trades
 raw_sec_form4
 raw_usaspending
+raw_sam_gov
+raw_congress_gov
+raw_federal_register
+raw_lda_gov
+raw_sec_edgar_additional
+raw_fec
+raw_grants_gov
 → signals
 
 signals
@@ -333,7 +376,7 @@ Decisiones cerradas
 * Telegram = canal operativo de alertas V1.
 * No usar SQLite en V1.
 * No usar Playwright mientras Capitol Trades HTML funcione.
-* No añadir nuevas fuentes.
+* No añadir nuevas fuentes fuera del conjunto V1 aprobado sin decisión explícita.
 
 ⸻
 
@@ -347,11 +390,18 @@ Motivo:
 * Produjo columnas desalineadas.
 * No debe utilizarse como fuente de trabajo.
 
-Las únicas pestañas raw válidas son:
+Las pestañas raw válidas son:
 
 raw_capitol_trades
 raw_sec_form4
 raw_usaspending
+raw_sam_gov
+raw_congress_gov
+raw_federal_register
+raw_lda_gov
+raw_sec_edgar_additional
+raw_fec
+raw_grants_gov
 
 El workflow .github/workflows/local_validation.yml ejecuta validación local con fixtures en cada push y pull request.
 
@@ -370,10 +420,53 @@ Las fuentes externas pueden fallar de forma transitoria. Capitol Trades puede de
 
 Próximo objetivo
 
-Observar estabilidad del seguimiento diario, scoring y alertas Telegram; endurecer validaciones operativas.
+Observar estabilidad del seguimiento diario, scoring y alertas Telegram; endurecer validaciones operativas con fallos reales.
 
 Antes de avanzar a nuevos canales externos o dashboard:
 
 1. Mantener Google Sheets como fuente de verdad.
 2. No introducir nuevos canales externos ni nuevas fuentes sin decisión explícita.
 3. Revisar fallos reales del workflow diario antes de añadir nuevas superficies de producto.
+
+
+⸻
+
+Fase 10 - Conflictos de interés en el Congreso (2026-10-22)
+
+Diagnóstico previo:
+
+* El workflow diario fallaba desde el 2026-07-05 en "Validate raw data quality"; al bloquear, nunca se reconstruía el radar ni se enviaban alertas.
+* Capitol Trades fallaba a diario desde GitHub Actions (bloqueo/429), dejando el radar sin operaciones de políticos.
+* GitHub desactivó el workflow "Daily radar" el 2026-09-04 por inactividad.
+
+Cambios:
+
+* Nueva fuente oficial: collectors/collect_congress_ptr.py (House Clerk + Senate eFD) -> raw_congress_ptr.
+* Enriquecimiento con comités (unitedstates/congress-legislators) y sector del ticker (lista curada + SIC SEC).
+* config/conflict_sectors.json: comités -> sectores, definición de sectores y scoring.
+* scripts/send_conflict_alerts.py: hojas conflict_trades y ptr_manual_review + alertas Telegram deduplicadas.
+* Nuevo signal_type PTR_BUY_CONFLICT integrado en clusters, correlaciones y scoring.
+* Validación de calidad y métricas pasan a ser informativas (continue-on-error) y no bloquean el radar.
+* Capitol Trades se retira del workflow diario.
+
+Pendiente / limitaciones:
+
+* Senate eFD no se pudo probar desde fuera de EE. UU. (bloqueo geográfico); se valida en la primera ejecución en GitHub Actions.
+* Las declaraciones escaneadas (en papel) se listan en ptr_manual_review pero no se leen (sin OCR).
+
+Fase 11 - Tracker de copia estilo "Pelosi ETF" (2026-10-22)
+
+* Workflow congress_watch.yml cada 2 horas (PTR -> Sheets -> tracker -> alertas) con caché de referencia y keepalive anti-desactivación.
+* Histórico con --since (backfill) en collect_congress_ptr.py.
+* radar/prices.py: precios diarios Yahoo Finance con caché CSV.
+* radar/tracker.py + scripts/build_tracker.py: politician_scorecard, replica_holdings, copy_portfolio_summary/nav/positions y resumen semanal.
+* scripts/send_congress_alerts.py: alertas CONFLICTO/SEGUIDO/TOP/CLUSTER/PAPEL con contexto de precio, otros compradores, historial y acción de la réplica.
+* config/tracker.json: políticos seguidos, umbrales de alerta y carteras.
+* Parser House reescrito con posiciones de palabras (pdfplumber); validado con 15 PDFs reales (~300 operaciones).
+* daily_radar.yml ya no recoge PTR (lo hace congress_watch) y comparte grupo de concurrencia.
+
+Fase 12 - Agente Claude + simplificación (2026-10-22)
+
+* radar/agent.py: lectura de declaraciones escaneadas con visión (salida estructurada, caché por DocID), investigación de alertas con búsqueda web (hoja agent_review) y comentario semanal. Opcional vía secret ANTHROPIC_API_KEY.
+* Collector: caché de declaraciones ya parseadas (no se vuelven a descargar), prioridad de escaneados de políticos seguidos, columna extraction (pdf_text / html / claude_vision / pending_manual).
+* Simplificación: eliminado el guardado de PDFs/HTML crudos, append genérico en radar/sheets.py reutilizado por los logs, alias send_conflict_alerts.py retirado, documentación unificada en docs/congress_tracker.md.

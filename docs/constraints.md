@@ -11,6 +11,13 @@ Valid raw tabs:
 * `raw_capitol_trades`
 * `raw_sec_form4`
 * `raw_usaspending`
+* `raw_sam_gov`
+* `raw_congress_gov`
+* `raw_federal_register`
+* `raw_lda_gov`
+* `raw_sec_edgar_additional`
+* `raw_fec`
+* `raw_grants_gov`
 
 Derived tab:
 
@@ -30,6 +37,20 @@ Capitol Trades -> CSV -> `raw_capitol_trades`
 SEC Form 4 -> CSV -> `raw_sec_form4`
 
 USASpending -> CSV -> `raw_usaspending`
+
+SAM.gov -> CSV -> `raw_sam_gov`
+
+Congress.gov -> CSV -> `raw_congress_gov`
+
+Federal Register -> CSV -> `raw_federal_register`
+
+LDA.gov -> CSV -> `raw_lda_gov`
+
+SEC EDGAR additional -> CSV -> `raw_sec_edgar_additional`
+
+FEC -> CSV -> `raw_fec`
+
+Grants.gov -> CSV -> `raw_grants_gov`
 
 Raw Google Sheets tabs -> `signals`
 
@@ -64,7 +85,7 @@ Do not introduce:
 * microservices
 * Playwright
 * complex scoring
-* new external sources
+* external sources beyond the approved V1 raw tabs above
 
 Do not redesign the architecture without an explicit product decision.
 

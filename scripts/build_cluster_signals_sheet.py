@@ -38,8 +38,36 @@ CLUSTER_SIGNALS_HEADER = [
     "source_signal_ids",
 ]
 
-TICKER_SIGNAL_TYPES = {"PTR_BUY", "INSIDER_BUY"}
-CONTRACT_SIGNAL_TYPES = {"CONTRACT"}
+TICKER_SIGNAL_TYPES = {"PTR_BUY", "PTR_BUY_CONFLICT", "INSIDER_BUY"}
+CONTRACT_SIGNAL_TYPES = {"CONTRACT", "CONTRACT_AWARD_NOTICE"}
+PUBLIC_CATALYST_SIGNAL_TYPES = {
+    "CONTRACT_OPPORTUNITY",
+    "CONTRACT_PRE_SOLICITATION",
+    "CONTRACT_SOLE_SOURCE",
+    "GRANT_FORECAST",
+    "GRANT_OPPORTUNITY",
+    "RULE_PROPOSED",
+    "RULE_FINAL",
+    "AGENCY_NOTICE",
+    "EXECUTIVE_ACTION",
+    "REGULATORY_CATALYST",
+    "BILL_INTRODUCED",
+    "COMMITTEE_ACTION",
+    "LEGISLATIVE_ACTION",
+    "LOBBY_NEW_REGISTRATION",
+    "LOBBY_SPEND_INCREASE",
+    "LOBBY_ISSUE_MATCH",
+    "LOBBY_CLIENT_ACTIVITY",
+    "MATERIAL_EVENT_8K",
+    "MATERIAL_CONTRACT_8K",
+    "MAJOR_HOLDER_ENTRY",
+    "ACTIVIST_POSITION",
+    "FORM144_PLANNED_SALE",
+    "INSTITUTIONAL_POSITION_13F",
+    "POLITICAL_CONTRIBUTION",
+    "PAC_CONTRIBUTION",
+    "EXECUTIVE_CONTRIBUTION",
+}
 
 
 def parse_signal_date(signal):
@@ -123,6 +151,12 @@ def build_reason(cluster_type, signals):
             f"{len(signals)} contracts for the same recipient."
         )
 
+    if cluster_type == "PUBLIC_CATALYST_ACTIVITY":
+        return (
+            f"Repeated public catalyst activity within {WINDOW_DAYS} days: "
+            f"{signal_type_summary} for the same entity."
+        )
+
     return f"Cluster detected from {len(signals)} related signals."
 
 
@@ -176,6 +210,7 @@ def build_clusters(signals):
 
     signals_by_ticker = defaultdict(list)
     contracts_by_entity = defaultdict(list)
+    public_catalysts_by_entity = defaultdict(list)
 
     for signal in signals:
         signal_type = get_value(signal, "signal_type")
@@ -187,6 +222,9 @@ def build_clusters(signals):
 
         if signal_type in CONTRACT_SIGNAL_TYPES and entity_name:
             contracts_by_entity[normalize_entity_key(entity_name)].append(signal)
+
+        if signal_type in PUBLIC_CATALYST_SIGNAL_TYPES and entity_name:
+            public_catalysts_by_entity[normalize_entity_key(entity_name)].append(signal)
 
     for ticker, ticker_signals in sorted(signals_by_ticker.items()):
         window_signals = group_within_window(signals_with_dates(ticker_signals))
@@ -224,6 +262,21 @@ def build_clusters(signals):
             clusters,
             seen_signal_sets,
             "REPEATED_CONTRACTS",
+            window_signals,
+            entity_name=first_non_empty(
+                get_value(signal, "entity_name") for signal in window_signals
+            ),
+        )
+
+    for entity_key, catalyst_signals in sorted(public_catalysts_by_entity.items()):
+        window_signals = group_within_window(signals_with_dates(catalyst_signals))
+        if len(window_signals) < 2:
+            continue
+
+        add_cluster(
+            clusters,
+            seen_signal_sets,
+            "PUBLIC_CATALYST_ACTIVITY",
             window_signals,
             entity_name=first_non_empty(
                 get_value(signal, "entity_name") for signal in window_signals
