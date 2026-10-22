@@ -184,7 +184,7 @@ def classify(row, conflict_config, tracker_config, top_keys, buyers):
     ):
         if trade_type == "buy" or (alerts["followed_include_sells"] and trade_type in ("sell", "sell_partial")):
             tags.append("SEGUIDO")
-    if trade_type == "buy" and key in top_keys:
+    if trade_type == "buy" and key in top_keys and get_value(row, "ticker"):
         tags.append("TOP")
     if trade_type == "buy" and get_value(row, "ticker"):
         if len(other_buyers(buyers, row, alerts["cluster_window_days"])) + 1 >= alerts["cluster_min_politicians"]:
