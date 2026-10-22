@@ -59,8 +59,7 @@
     "followed_min_amount": 1001,
     "followed_include_sells": true,
     "cluster_min_politicians": 3,
-    "cluster_window_days": 30,
-    "watchlist_min_red_flags": 2
+    "cluster_window_days": 30
   },
   "scorecard": {
     "horizons_days": [
@@ -145,6 +144,7 @@
     "late_filing_days": 45,
     "late_filing_pct": 20.0,
     "min_short_term_trades": 10,
-    "short_term_excess_pct": 1.5
+    "short_term_excess_pct": 1.5,
+    "watchlist_min_flags": 2
   }
 }

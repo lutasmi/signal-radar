@@ -47,6 +47,7 @@ SCORECARD_HEADER = [
     "beats_market",
     "red_flags",
     "red_flag_reasons",
+    "watchlist",
     "conflict_evaluated",
     "conflict_avg_excess",
     "other_avg_excess",
@@ -117,7 +118,7 @@ def merged_nav(nav_by_strategy, prices):
 
 def insider_watchlist(scorecard_rows):
     """Politicians with >= 2 red flags of a possible informational edge."""
-    rows = [r for r in scorecard_rows if (r.get("red_flags") or 0) >= 2]
+    rows = [r for r in scorecard_rows if r.get("watchlist") == "YES"]
     rows.sort(key=lambda r: (-r["red_flags"], -(r.get("conflict_avg_excess") or -1e9)))
     return [{c: fmt(r.get(c)) for c in WATCHLIST_HEADER} for r in rows]
 
@@ -220,7 +221,7 @@ def main():
             f"| pre-disclosure {fmt(g['avg_pre_disclosure_move'])}"
         )
     watchlist = insider_watchlist(scorecard)
-    print(f"\nInsider watchlist (>=2 red flags): {len(watchlist)}")
+    print(f"\nInsider watchlist (>=2 red flags incl. a performance flag): {len(watchlist)}")
     for w in watchlist[:20]:
         print(f"- [{w['red_flags']}] {w['politician']} ({w['party']}, {w['chamber']}): {w['red_flag_reasons']} | conflicto {w['conflict_avg_excess']} vs resto {w['other_avg_excess']} (n={w['conflict_evaluated']})")
     if args.dry_run:

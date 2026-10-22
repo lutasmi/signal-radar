@@ -543,17 +543,8 @@ def read_scorecard(sheet):
 
 
 def top_keys_from_rows(rows, tracker_config):
-    """Politicians on the insider watchlist: >= N red flags in politician_scorecard."""
-    minimum = tracker_config["alerts"].get("watchlist_min_red_flags", 2)
-    keys = []
-    for r in rows:
-        try:
-            flags = int(to_float(get_value(r, "red_flags") or "0"))
-        except ValueError:
-            continue
-        if flags >= minimum:
-            keys.append(get_value(r, "politician_key"))
-    return keys
+    """Politicians on the insider watchlist (watchlist=YES in politician_scorecard)."""
+    return [get_value(r, "politician_key") for r in rows if get_value(r, "watchlist") == "YES"]
 
 
 def run(dry_run=False, max_messages=DEFAULT_MAX_MESSAGES, with_prices=True):
@@ -749,7 +740,7 @@ def validate_logic():
         raise ValueError("Replica must buy committee-conflict trades")
     if replica_line({**base, "conflict": "NO", "bioguide_id": "Z9"}, tracker_config, ["CLUSTER"]):
         raise ValueError("Replica must ignore trades without committee conflict")
-    if top_keys_from_rows([{"politician_key": "A", "red_flags": "3"}, {"politician_key": "B", "red_flags": "1"}], tracker_config) != ["A"]:
+    if top_keys_from_rows([{"politician_key": "A", "watchlist": "YES"}, {"politician_key": "B", "watchlist": ""}], tracker_config) != ["A"]:
         raise ValueError("Watchlist keys must come from red_flags")
     if to_float("1.234,5") != 1234.5 or to_float("7.5") != 7.5:
         raise ValueError("to_float locale handling")

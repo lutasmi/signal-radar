@@ -28,7 +28,7 @@ contratos, insiders y catalizadores (`PTR_BUY_CONFLICT` en `signals`).
 |---|---|
 | 🚨 CONFLICTO | Compra de un miembro de un comité con jurisdicción sobre el sector (score ≥ 50) |
 | 👀 SEGUIDO | Cualquier compra o venta de un político de `config/tracker.json` |
-| 🔎 VIGILADO | Compra de un político con ≥ 2 indicios de ventaja informativa (`insider_watchlist`) |
+| 🔎 VIGILADO | Compra de un político en la `insider_watchlist`: ≥ 2 indicios, al menos uno de rentabilidad |
 | 🧲 CLUSTER | 3+ congresistas compran el mismo ticker en 30 días |
 | 📄 PAPEL | Un político seguido presenta una declaración escaneada que no se pudo leer |
 
@@ -65,7 +65,7 @@ corto; en uso normal 1–3 USD/mes y nunca más del tope configurado.
 * `politician_scorecard` → banderas rojas (0–4) con el motivo: compras en sectores de su
   comité que baten al mercado y a sus demás compras, la acción sube antes de hacerse
   pública, declaraciones tardías frecuentes, ventaja fuerte a 30 días.
-* `insider_watchlist`: políticos con ≥ 2 banderas. Sus compras disparan alertas 🔎.
+* `insider_watchlist`: políticos con ≥ 2 banderas, al menos una de rentabilidad (conflicto o 30 días); el movimiento previo a la declaración se mide descontando el S&P 500. Sus compras disparan alertas 🔎.
 * Indicios estadísticos sobre datos públicos, no pruebas.
 
 ## Carteras réplica

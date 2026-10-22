@@ -179,7 +179,10 @@ def validate_tracker_logic():
     buys = [{"conflict": i < 6, "delay": 60 if i < 3 else 10} for i in range(12)]
     metrics = [{"excess_90": 8.0 if b["conflict"] else -1.0, "excess_30": 3.0, "pre_move": 2.0} for b in buys]
     flags = tracker.insider_indicators(buys, metrics, 90, config)
-    if flags["red_flags"] != 4 or "comité" not in flags["red_flag_reasons"] or round(flags["late_filing_pct"]) != 25:
+    weak = tracker.insider_indicators(buys, [{**m, "excess_90": -1.0, "excess_30": -1.0} for m in metrics], 90, config)
+    if weak["red_flags"] != 2 or weak["watchlist"]:
+        raise ValueError(f"tracker: timing/late flags alone must not put a losing trader on the watchlist {weak}")
+    if flags["watchlist"] != "YES" or flags["red_flags"] != 4 or "comité" not in flags["red_flag_reasons"] or round(flags["late_filing_pct"]) != 25:
         raise ValueError(f"tracker: insider red flags wrong {flags}")
     print("OK tracker_logic: no look-ahead entry/exit, NAV vs SPY, scorecard, point-in-time ranking, red flags")
     return 1

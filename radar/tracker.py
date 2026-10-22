@@ -119,9 +119,14 @@ def trade_returns(trade, prices, horizons):
     entry_day, entry_price = prices.after(ticker, trade["filing_date"])
     result = {"entry_day": entry_day, "entry_price": entry_price, "pre_move": None}
     if trade["transaction_date"]:
-        _, tx_price = prices.on_or_after(ticker, trade["transaction_date"])
+        tx_day, tx_price = prices.on_or_after(ticker, trade["transaction_date"])
         if entry_price and tx_price:
-            result["pre_move"] = pct(tx_price, entry_price)
+            # Market-adjusted: stock move between trade and disclosure minus SPY's move.
+            _, spy_tx = prices.on_or_before(BENCHMARK, tx_day)
+            _, spy_entry = prices.on_or_before(BENCHMARK, entry_day)
+            bench = pct(spy_tx, spy_entry)
+            stock = pct(tx_price, entry_price)
+            result["pre_move"] = None if bench is None else stock - bench
     if not entry_price:
         return result
     last_day, last_price = prices.latest(ticker)
@@ -164,6 +169,7 @@ DEFAULT_INSIDER_FLAGS = {
     "late_filing_pct": 20.0,
     "min_short_term_trades": 10,
     "short_term_excess_pct": 1.5,
+    "watchlist_min_flags": 2,
 }
 
 
@@ -197,6 +203,10 @@ def insider_indicators(buys, metrics, horizon, config):
         flags.append("declara tarde con frecuencia")
     if len(short) >= rules["min_short_term_trades"] and _avg(short) > rules["short_term_excess_pct"]:
         flags.append("ventaja fuerte a 30 días")
+    # Watchlist needs >= N flags AND at least one *performance* flag: late filing or
+    # timing alone do not show an edge if the trades still lose to the market.
+    performance = any(f.startswith(("compras en sectores", "ventaja fuerte")) for f in flags)
+    watch = len(flags) >= rules.get("watchlist_min_flags", 2) and performance
     return {
         "conflict_evaluated": len(conflict),
         "conflict_avg_excess": conflict_avg,
@@ -204,6 +214,7 @@ def insider_indicators(buys, metrics, horizon, config):
         "late_filing_pct": late_pct,
         "red_flags": len(flags),
         "red_flag_reasons": "; ".join(flags),
+        "watchlist": "YES" if watch else "",
     }
 
 
