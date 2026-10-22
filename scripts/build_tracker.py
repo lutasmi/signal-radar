@@ -176,8 +176,44 @@ def build_digest(summaries, holdings, scorecard_records_, max_holdings=10):
     return "\n".join(lines)
 
 
+def build_report(summaries, groups, watchlist, holdings, alert_rows, today):
+    """Weekly markdown status report (committed to reports/ for follow-up reviews)."""
+    from datetime import date, timedelta
+
+    lines = [f"# Congress tracker · informe semanal {today}", ""]
+    lines += ["## Carteras réplica vs S&P 500", "",
+              "| Cartera | Desde | Total | S&P 500 | 30 días | S&P 500 30d | Abiertas |", "|---|---|---|---|---|---|---|"]
+    for s in summaries:
+        lines.append(
+            f"| {s['name']} | {s['start']} | {s['total_return_pct']}% | {s['benchmark_return_pct']}% | "
+            f"{s['return_30d_pct']}% | {s['benchmark_30d_pct']}% | {s['open_positions']} |"
+        )
+    lines += ["", "## Grupos de compras vs S&P 500 (exceso medio)", "",
+              "| Grupo | n (90d) | 30d | 90d | aciertos 90d | 180d | movimiento previo |", "|---|---|---|---|---|---|---|"]
+    for g in groups:
+        lines.append(
+            f"| {g['group']} | {g['evaluated_90d']} | {fmt(g['avg_excess_30d'])} | {fmt(g['avg_excess_90d'])} | "
+            f"{fmt(g['hit_rate_90d'])} | {fmt(g['avg_excess_180d'])} | {fmt(g['avg_pre_disclosure_move'])} |"
+        )
+    lines += ["", f"## Lista de vigilancia ({len(watchlist)})", ""]
+    for w in watchlist:
+        lines.append(f"- [{w['red_flags']}] {w['politician']} ({w['party']}, {w['chamber']}): {w['red_flag_reasons']}")
+    main_id = summaries[0]["strategy"] if summaries else ""
+    lines += ["", "## Mayores posiciones de la cartera principal", ""]
+    for h in [h for h in holdings if h["strategy"] == main_id][:15]:
+        lines.append(f"- {h['ticker']} {h['weight_pct']}% — {h['politicians'][:80]}")
+    week_ago = (date.fromisoformat(today) - timedelta(days=7)).isoformat()
+    recent = [r for r in alert_rows if (r.get("sent_at") or "")[:10] > week_ago]
+    lines += ["", f"## Alertas enviadas los últimos 7 días: {len(recent)}", ""]
+    for r in recent[-30:]:
+        lines.append(f"- {r.get('sent_at', '')[:16]} · {r.get('item_id', '')} · {r.get('score_band', '')}")
+    lines += ["", "_Simulación con datos públicos; no es una recomendación de inversión._", ""]
+    return "\n".join(lines)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument("--report", default="", help="Write the weekly markdown report to this path.")
     parser.add_argument("--dry-run", action="store_true", help="Compute and print, do not write Sheets.")
     parser.add_argument("--digest", action="store_true", help="Also send the weekly Telegram digest.")
     parser.add_argument("--no-refresh", action="store_true", help="Use cached prices only.")
@@ -242,6 +278,19 @@ def main():
         [{c: p.get(c, "") for c in POSITIONS_HEADER} for p in positions],
     )
     print("Tracker sheets written")
+
+    if args.report:
+        from datetime import date as _date
+
+        from radar.sheets import read_records_or_empty
+
+        report = build_report(
+            summaries, groups, watchlist, holdings,
+            read_records_or_empty(sheet, "telegram_alert_log"), _date.today().isoformat(),
+        )
+        Path(args.report).parent.mkdir(parents=True, exist_ok=True)
+        Path(args.report).write_text(report, encoding="utf-8")
+        print(f"Weekly report written: {args.report}")
 
     if args.digest:
         from scripts import send_telegram_alerts as telegram

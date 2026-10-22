@@ -25,11 +25,20 @@ on:
         options:
           - "false"
           - "true"
+      weekly:
+        description: "Also send the weekly digest and commit the weekly report"
+        required: false
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
   schedule:
     - cron: "23 */2 * * *"
+    - cron: "17 6 * * 1"  # weekly digest + report (Monday)
 
 permissions:
-  contents: read
+  contents: write
   actions: write
 
 concurrency:
@@ -112,12 +121,22 @@ jobs:
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
-          # Weekly digest on the Monday 06:xx UTC scheduled run.
-          if [ "${{ github.event_name }}" = "schedule" ] && [ "$(date -u +%u)" = "1" ] && [ "$(date -u +%H)" = "06" ]; then
-            python3 scripts/build_tracker.py --digest
+          # Weekly digest + report: Monday schedule or manual "weekly" input.
+          if [ "${{ github.event.schedule }}" = "17 6 * * 1" ] || [ "${{ inputs.weekly }}" = "true" ]; then
+            python3 scripts/build_tracker.py --digest --report reports/weekly_status.md
           else
             python3 scripts/build_tracker.py
           fi
+
+      - name: Commit weekly report
+        if: ${{ hashFiles('reports/weekly_status.md') != '' }}
+        continue-on-error: true
+        run: |
+          git config user.name "signal-radar-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add reports/weekly_status.md
+          git commit -m "Weekly tracker report $(date -u +%F)" || exit 0
+          git pull --rebase -q origin main && git push -q origin HEAD:main
 
       - name: Send congress alerts
         if: ${{ always() }}
