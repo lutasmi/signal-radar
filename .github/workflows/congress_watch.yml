@@ -92,6 +92,10 @@ jobs:
         if: ${{ steps.collect.outcome == 'success' }}
         run: python3 loaders/load_congress_ptr_csv_to_sheets.py
 
+      - name: Sheet health report
+        continue-on-error: true
+        run: python3 scripts/sheet_health.py
+
       - name: Build scorecard and copy portfolios
         id: tracker
         continue-on-error: true
