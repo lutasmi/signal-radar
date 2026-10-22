@@ -44,6 +44,7 @@ SCORECARD_HEADER = [
     "tickers",
     "last_filing",
     "followed",
+    "beats_market",
     "politician_key",
 ]
 HOLDINGS_HEADER = ["strategy", "ticker", "weight_pct", "value_usd", "politicians", "since", "conflict", "options"]
@@ -69,10 +70,12 @@ def fmt(value, digits=2):
 
 def scorecard_records(scorecard, config):
     followed = tracker.followed_keys(config)
+    beaters = set(tracker.top_politicians(scorecard, config))
     records = []
     for row in scorecard:
         record = {column: fmt(row.get(column)) for column in SCORECARD_HEADER}
         record["followed"] = "YES" if row["politician_key"] in followed else ""
+        record["beats_market"] = "YES" if row["politician_key"] in beaters else ""
         records.append(record)
     return records
 
@@ -100,6 +103,7 @@ def merged_nav(nav_by_strategy, prices):
 def build(raw_rows, prices, config):
     trades = tracker.tradeable_trades(raw_rows, config)
     scorecard = tracker.build_scorecard(trades, prices, config)
+    tracker.mark_point_in_time_beaters(trades, prices, config)
     results = {}
     for strategy in config["portfolios"]:
         results[strategy["id"]] = tracker.simulate_portfolio(trades, prices, strategy, config)

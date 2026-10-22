@@ -157,7 +157,26 @@ def validate_tracker_logic():
     scorecard = tracker.build_scorecard(trades, prices, config)
     if scorecard[0]["buys"] != 1 or round(scorecard[0]["avg_excess_30d"], 2) != 20.0:
         raise ValueError(f"tracker: wrong scorecard {scorecard[0]}")
-    print("OK tracker_logic: no look-ahead entry/exit, NAV vs SPY, scorecard")
+    # Point-in-time "beats the market": only outcomes known before each filing count.
+    days2 = [date(2025, 1, 1) + timedelta(days=i) for i in range(0, 400) if (date(2025, 1, 1) + timedelta(days=i)).weekday() < 5]
+    up = PriceStore(
+        histories={"SPY": [(d, 100.0) for d in days2], "UPP": [(d, 100.0 + i) for i, d in enumerate(days2)]},
+        today=days2[-1],
+    )
+    raw2 = [
+        {"politician": "B", "bioguide_id": "B1", "ticker": "UPP", "asset_type": "ST", "trade_type": "buy",
+         "transaction_date": (date(2025, 1, 6) + timedelta(days=7 * k)).isoformat(),
+         "filing_date": (date(2025, 1, 8) + timedelta(days=7 * k)).isoformat(), "amount": "$1,001 - $15,000",
+         "conflict": "NO", "conflict_score": "0", "filing_id": f"b{k}", "source_url": "u"}
+        for k in range(30)
+    ]
+    trades2 = tracker.mark_point_in_time_beaters(tracker.tradeable_trades(raw2, config), up, config)
+    flags = [t["beater"] for t in trades2]
+    first_true = flags.index(True)
+    # 10 outcomes needed, each known ~90 days after entry: the 1st trades cannot qualify.
+    if first_true < 20 or not all(flags[first_true:]) or any(flags[:first_true]):
+        raise ValueError(f"tracker: point-in-time beater flags look ahead {flags}")
+    print("OK tracker_logic: no look-ahead entry/exit, NAV vs SPY, scorecard, point-in-time ranking")
     return 1
 
 

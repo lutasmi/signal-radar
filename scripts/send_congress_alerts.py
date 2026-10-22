@@ -61,6 +61,7 @@ REVIEW_HEADER = [
 CHAMBER_PREFIX = {"senate": "Sen.", "house": "Rep."}
 TRADE_LABEL = {"buy": "COMPRA", "sell": "VENTA", "sell_partial": "VENTA PARCIAL", "exchange": "CANJE"}
 TAG_EMOJI = {"CONFLICTO": "🚨", "SEGUIDO": "👀", "TOP": "🏆", "CLUSTER": "🧲", "PAPEL": "📄"}
+TAG_LABEL = {"TOP": "BATE AL MERCADO"}
 
 
 # ---------------------------------------------------------------------------
@@ -262,13 +263,14 @@ def scorecard_line(row, scorecard_lookup):
     )
 
 
-def replica_line(row, tracker_config):
+def replica_line(row, tracker_config, tags=()):
     if get_value(row, "trade_type") not in ("buy", "sell", "sell_partial") or not get_value(row, "ticker"):
         return ""
     followed = tracker.followed_keys(tracker_config)
     trade = {
         "bioguide_id": get_value(row, "bioguide_id"),
         "conflict": get_value(row, "conflict") == "YES",
+        "beater": "TOP" in tags,
     }
     names = [
         s["name"].split(" (")[0]
@@ -324,7 +326,7 @@ def build_message(group, prices=None, scorecard_lookup=None, buyers=None, tracke
                 tags.append(tag)
     head_emoji = TAG_EMOJI.get(tags[0], "🔔")
     top_score = max((score_of(r) for r, _ in group), default=0)
-    title = " · ".join(tags)
+    title = " · ".join(TAG_LABEL.get(tag, tag) for tag in tags)
     if "CONFLICTO" in tags:
         title += f" · score {top_score}"
     lines = [f"{head_emoji} {title}", member_label(first_row)]
@@ -363,7 +365,7 @@ def build_message(group, prices=None, scorecard_lookup=None, buyers=None, tracke
             if others:
                 lines.append(f"  También compran {ticker} ({window} días): {', '.join(others[:6])}")
         if tracker_config:
-            replica = replica_line(row, tracker_config)
+            replica = replica_line(row, tracker_config, row_tags)
             if replica:
                 lines.append(f"  {replica}")
         lines.extend(review_lines((reviews or {}).get(make_alert_id(row))))
@@ -537,17 +539,8 @@ def read_scorecard(sheet):
 
 
 def top_keys_from_rows(rows, tracker_config):
-    alerts = tracker_config["alerts"]
-    keys = []
-    for r in rows:
-        try:
-            evaluated = int(to_float(get_value(r, "evaluated_trades") or "0"))
-            excess = to_float(get_value(r, "avg_excess_90d") or "0")
-        except ValueError:
-            continue
-        if get_value(r, "rank") and evaluated >= alerts["top_scorecard_min_trades"] and excess > 0:
-            keys.append(get_value(r, "politician_key"))
-    return keys[: alerts["top_scorecard_politicians"]]
+    """Politicians flagged beats_market=YES in politician_scorecard (best first)."""
+    return [get_value(r, "politician_key") for r in rows if get_value(r, "beats_market") == "YES"]
 
 
 def run(dry_run=False, max_messages=DEFAULT_MAX_MESSAGES, with_prices=True):
@@ -716,7 +709,7 @@ def validate_logic():
     conflict_msg = by_key.get(("Test Senator", "F1"))
     if not conflict_msg or "COMPRA LMT" not in conflict_msg or "COMPRA NOC" not in conflict_msg:
         raise ValueError(f"Conflict alert missing or incomplete: {by_key.keys()}")
-    if "desde su operación +10.0%" not in conflict_msg or "Trumpito ETF" not in conflict_msg:
+    if "desde su operación +10.0%" not in conflict_msg:
         raise ValueError(f"Conflict alert lacks price/replica context:\n{conflict_msg}")
     pelosi_msg = by_key.get(("Nancy Pelosi", "P1"))
     if not pelosi_msg or "SEGUIDO" not in pelosi_msg or "(OPCIONES)" not in pelosi_msg:
@@ -739,6 +732,12 @@ def validate_logic():
     line = scorecard_line(base, {"X0001": {"rank": "2", "evaluated_trades": "40", "avg_excess_90d": "6,25", "hit_rate": "61,5"}})
     if "+6.2%" not in line or "aciertos 62%" not in line:
         raise ValueError(f"Scorecard numbers with Spanish locale not parsed: {line}")
+    if "Trumpito ETF" not in replica_line({**base, "conflict": "NO"}, tracker_config, ["TOP"]):
+        raise ValueError("Replica must buy trades of market-beating politicians")
+    if replica_line({**base, "conflict": "NO", "bioguide_id": "Z9"}, tracker_config, ["CLUSTER"]):
+        raise ValueError("Replica must ignore politicians that do not beat the market")
+    if top_keys_from_rows([{"politician_key": "A", "beats_market": "YES"}, {"politician_key": "B", "beats_market": ""}], tracker_config) != ["A"]:
+        raise ValueError("Top keys must come from beats_market")
     if to_float("1.234,5") != 1234.5 or to_float("7.5") != 7.5:
         raise ValueError("to_float locale handling")
     sent = {make_alert_id(r) for r in rows}

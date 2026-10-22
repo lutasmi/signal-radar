@@ -59,9 +59,7 @@
     "followed_min_amount": 1001,
     "followed_include_sells": true,
     "cluster_min_politicians": 3,
-    "cluster_window_days": 30,
-    "top_scorecard_politicians": 10,
-    "top_scorecard_min_trades": 5
+    "cluster_window_days": 30
   },
   "scorecard": {
     "horizons_days": [
@@ -74,10 +72,9 @@
   "portfolios": [
     {
       "id": "trumpito",
-      "name": "Trumpito ETF (seguidos + conflictos de interés)",
+      "name": "Trumpito ETF (políticos que baten al mercado)",
       "include": [
-        "followed",
-        "conflict"
+        "beaters"
       ],
       "weighting": "amount",
       "max_lot_usd": 100000,
@@ -130,5 +127,12 @@
     "vision_max_pages": 15,
     "max_vision_filings_per_run": 2,
     "weekly_memo": false
+  },
+  "ranking_rule": {
+    "_doc": "A politician 'beats the market' when, over buys whose 90-day outcome is known, the average excess return vs SPY is > min_avg_excess and the hit rate >= min_hit_rate, with at least min_evaluated_trades. Portfolios apply it point-in-time (no look-ahead).",
+    "horizon_days": 90,
+    "min_evaluated_trades": 10,
+    "min_avg_excess": 0.0,
+    "min_hit_rate": 50.0
   }
 }

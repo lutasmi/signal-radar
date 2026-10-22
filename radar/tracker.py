@@ -7,6 +7,7 @@ Timing convention (no look-ahead): a trade becomes actionable the first
 trading day AFTER its filing date, at that day's close.
 """
 
+import bisect
 import json
 import re
 import statistics
@@ -199,16 +200,60 @@ def build_scorecard(trades, prices, config):
     return rows
 
 
+DEFAULT_RANKING_RULE = {"horizon_days": 90, "min_evaluated_trades": 10, "min_avg_excess": 0.0, "min_hit_rate": 50.0}
+
+
+def ranking_rule(config):
+    return {**DEFAULT_RANKING_RULE, **config.get("ranking_rule", {})}
+
+
+def beats_market(evaluated, avg_excess, hit_rate, rule):
+    """The single definition of 'this politician beats the market' (used everywhere)."""
+    return (
+        evaluated >= rule["min_evaluated_trades"]
+        and avg_excess is not None and avg_excess > rule["min_avg_excess"]
+        and hit_rate is not None and hit_rate >= rule["min_hit_rate"]
+    )
+
+
 def top_politicians(scorecard, config):
-    alerts = config["alerts"]
-    keys = [
+    """Politicians that beat the market today, best first."""
+    rule = ranking_rule(config)
+    horizon = rule["horizon_days"]
+    return [
         row["politician_key"]
         for row in scorecard
-        if row["ranked"] == "YES"
-        and row["evaluated_trades"] >= alerts["top_scorecard_min_trades"]
-        and (row.get("avg_excess_90d") or 0) > 0
+        if beats_market(row["evaluated_trades"], row.get(f"avg_excess_{horizon}d"), row.get("hit_rate"), rule)
     ]
-    return keys[: alerts["top_scorecard_politicians"]]
+
+
+def mark_point_in_time_beaters(trades, prices, config):
+    """Flag each trade with trade["beater"]: did its politician beat the market
+    using ONLY outcomes already known on the filing date? (no look-ahead bias)
+
+    An earlier buy's outcome is known `horizon_days` after its entry day.
+    """
+    rule = ranking_rule(config)
+    horizon = rule["horizon_days"]
+    history = defaultdict(list)  # politician -> [(known_date, excess)]
+    for trade in trades:
+        if trade["trade_type"] not in BUY_TYPES or not prices.has(trade["ticker"]):
+            continue
+        result = trade_returns(trade, prices, [horizon])
+        excess = result.get(f"excess_{horizon}")
+        if excess is not None and result["entry_day"]:
+            history[trade["key"]].append((result["entry_day"] + timedelta(days=horizon), excess))
+    known = {}
+    for key, items in history.items():
+        items.sort()
+        known[key] = ([d for d, _ in items], [e for _, e in items])
+    for trade in trades:
+        dates, excesses = known.get(trade["key"], ([], []))
+        sample = excesses[: bisect.bisect_left(dates, trade["filing_date"])]
+        avg = statistics.fmean(sample) if sample else None
+        hit = sum(1 for e in sample if e > 0) / len(sample) * 100 if sample else None
+        trade["beater"] = beats_market(len(sample), avg, hit, rule)
+    return trades
 
 
 # ---------------------------------------------------------------------------
@@ -227,6 +272,8 @@ def trade_included(trade, rules, followed):
         if rule == "followed" and trade["bioguide_id"] in followed:
             return True
         if rule == "conflict" and trade["conflict"]:
+            return True
+        if rule == "beaters" and trade.get("beater"):
             return True
         if rule.startswith("bioguide:") and trade["bioguide_id"] == rule.split(":", 1)[1]:
             return True
