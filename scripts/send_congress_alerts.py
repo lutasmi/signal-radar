@@ -60,8 +60,9 @@ REVIEW_HEADER = [
 
 CHAMBER_PREFIX = {"senate": "Sen.", "house": "Rep."}
 TRADE_LABEL = {"buy": "COMPRA", "sell": "VENTA", "sell_partial": "VENTA PARCIAL", "exchange": "CANJE"}
-TAG_EMOJI = {"CONFLICTO": "🚨", "SEGUIDO": "👀", "TOP": "🏆", "CLUSTER": "🧲", "PAPEL": "📄"}
-TAG_LABEL = {"TOP": "BATE AL MERCADO"}
+TAG_EMOJI = {"CONFLICTO": "🚨", "SEGUIDO": "👀", "TOP": "🔎", "CLUSTER": "🧲", "PAPEL": "📄"}
+# "TOP" = politician on the insider watchlist (>= N red flags in politician_scorecard).
+TAG_LABEL = {"TOP": "VIGILADO (indicios de ventaja informativa)"}
 
 
 # ---------------------------------------------------------------------------
@@ -257,9 +258,12 @@ def scorecard_line(row, scorecard_lookup):
     except ValueError:
         hit_txt = "n/d"
     rank_txt = f"#{rank} · " if rank else ""
+    reasons = get_value(sc, "red_flag_reasons")
+    flags_txt = f"\nIndicios ({get_value(sc, 'red_flags')}/4): {reasons}" if reasons else ""
     return (
         f"Historial: {rank_txt}{get_value(sc, 'evaluated_trades')} compras evaluadas, "
         f"exceso medio a 90 días vs S&P 500 {excess_txt}, aciertos {hit_txt}"
+        + flags_txt
     )
 
 
@@ -285,7 +289,7 @@ def replica_line(row, tracker_config, tags=()):
 
 def headline_rows(group, limit=MAX_DETAILED_TRADES):
     """Most relevant trades of a filing first: conflicts/clusters, buys, larger amounts."""
-    weight = {"CONFLICTO": 4, "CLUSTER": 3, "TOP": 2, "SEGUIDO": 1, "PAPEL": 0}
+    weight = {"CONFLICTO": 4, "TOP": 3, "CLUSTER": 2, "SEGUIDO": 1, "PAPEL": 0}
     ranked = sorted(
         group,
         key=lambda item: (
@@ -381,7 +385,7 @@ def build_message(group, prices=None, scorecard_lookup=None, buyers=None, tracke
 
 def group_candidates(candidates):
     groups = OrderedDict()
-    order = {"CONFLICTO": 0, "SEGUIDO": 1, "TOP": 2, "CLUSTER": 3, "PAPEL": 4}
+    order = {"CONFLICTO": 0, "TOP": 1, "SEGUIDO": 2, "CLUSTER": 3, "PAPEL": 4}
     ranked = sorted(
         candidates,
         key=lambda c: (min(order.get(t, 9) for t in c[1]), -score_of(c[0]), get_value(c[0], "filing_id")),
@@ -539,8 +543,17 @@ def read_scorecard(sheet):
 
 
 def top_keys_from_rows(rows, tracker_config):
-    """Politicians flagged beats_market=YES in politician_scorecard (best first)."""
-    return [get_value(r, "politician_key") for r in rows if get_value(r, "beats_market") == "YES"]
+    """Politicians on the insider watchlist: >= N red flags in politician_scorecard."""
+    minimum = tracker_config["alerts"].get("watchlist_min_red_flags", 2)
+    keys = []
+    for r in rows:
+        try:
+            flags = int(to_float(get_value(r, "red_flags") or "0"))
+        except ValueError:
+            continue
+        if flags >= minimum:
+            keys.append(get_value(r, "politician_key"))
+    return keys
 
 
 def run(dry_run=False, max_messages=DEFAULT_MAX_MESSAGES, with_prices=True):
@@ -709,7 +722,7 @@ def validate_logic():
     conflict_msg = by_key.get(("Test Senator", "F1"))
     if not conflict_msg or "COMPRA LMT" not in conflict_msg or "COMPRA NOC" not in conflict_msg:
         raise ValueError(f"Conflict alert missing or incomplete: {by_key.keys()}")
-    if "desde su operación +10.0%" not in conflict_msg:
+    if "desde su operación +10.0%" not in conflict_msg or "Trumpito ETF" not in conflict_msg:
         raise ValueError(f"Conflict alert lacks price/replica context:\n{conflict_msg}")
     pelosi_msg = by_key.get(("Nancy Pelosi", "P1"))
     if not pelosi_msg or "SEGUIDO" not in pelosi_msg or "(OPCIONES)" not in pelosi_msg:
@@ -732,12 +745,12 @@ def validate_logic():
     line = scorecard_line(base, {"X0001": {"rank": "2", "evaluated_trades": "40", "avg_excess_90d": "6,25", "hit_rate": "61,5"}})
     if "+6.2%" not in line or "aciertos 62%" not in line:
         raise ValueError(f"Scorecard numbers with Spanish locale not parsed: {line}")
-    if "Trumpito ETF" not in replica_line({**base, "conflict": "NO"}, tracker_config, ["TOP"]):
-        raise ValueError("Replica must buy trades of market-beating politicians")
+    if "Trumpito ETF" not in replica_line(base, tracker_config, ["CONFLICTO"]):
+        raise ValueError("Replica must buy committee-conflict trades")
     if replica_line({**base, "conflict": "NO", "bioguide_id": "Z9"}, tracker_config, ["CLUSTER"]):
-        raise ValueError("Replica must ignore politicians that do not beat the market")
-    if top_keys_from_rows([{"politician_key": "A", "beats_market": "YES"}, {"politician_key": "B", "beats_market": ""}], tracker_config) != ["A"]:
-        raise ValueError("Top keys must come from beats_market")
+        raise ValueError("Replica must ignore trades without committee conflict")
+    if top_keys_from_rows([{"politician_key": "A", "red_flags": "3"}, {"politician_key": "B", "red_flags": "1"}], tracker_config) != ["A"]:
+        raise ValueError("Watchlist keys must come from red_flags")
     if to_float("1.234,5") != 1234.5 or to_float("7.5") != 7.5:
         raise ValueError("to_float locale handling")
     sent = {make_alert_id(r) for r in rows}

@@ -28,7 +28,7 @@ contratos, insiders y catalizadores (`PTR_BUY_CONFLICT` en `signals`).
 |---|---|
 | 🚨 CONFLICTO | Compra de un miembro de un comité con jurisdicción sobre el sector (score ≥ 50) |
 | 👀 SEGUIDO | Cualquier compra o venta de un político de `config/tracker.json` |
-| 🏆 BATE AL MERCADO | Compra de un político que hoy bate al mercado según el ranking |
+| 🔎 VIGILADO | Compra de un político con ≥ 2 indicios de ventaja informativa (`insider_watchlist`) |
 | 🧲 CLUSTER | 3+ congresistas compran el mismo ticker en 30 días |
 | 📄 PAPEL | Un político seguido presenta una declaración escaneada que no se pudo leer |
 
@@ -56,21 +56,32 @@ Opcional: requiere el secret `ANTHROPIC_API_KEY`. Sin él todo lo demás funcion
 Coste orientativo con estos valores: ~0,05 USD por investigación y ~0,10 USD por escaneo
 corto; en uso normal 1–3 USD/mes y nunca más del tope configurado.
 
+## Indicios de información privilegiada
+
+* `insider_analysis`: compara grupos de compras con el S&P 500 a 30/90/180 días (con
+  y sin relación con el comité, liderazgo, importe, declaración tardía, opciones).
+  Con datos 2024–2026 las compras en sectores del propio comité ganan al índice
+  (+2,3 % a 90 días) y el resto pierde (−0,6 %).
+* `politician_scorecard` → banderas rojas (0–4) con el motivo: compras en sectores de su
+  comité que baten al mercado y a sus demás compras, la acción sube antes de hacerse
+  pública, declaraciones tardías frecuentes, ventaja fuerte a 30 días.
+* `insider_watchlist`: políticos con ≥ 2 banderas. Sus compras disparan alertas 🔎.
+* Indicios estadísticos sobre datos públicos, no pruebas.
+
 ## Carteras réplica
 
-Definidas en `config/tracker.json -> portfolios` (`trumpito`: solo políticos que baten al
-mercado; `pelosi`; `congreso`: todo el Congreso como referencia).
+Definidas en `config/tracker.json -> portfolios`:
 
-"Bate al mercado" (`ranking_rule`): al menos 10 compras con resultado conocido a 90 días,
-exceso medio frente al S&P 500 > 0 y acierto ≥ 50 %. La cartera lo aplica **en cada fecha**
-con la información disponible entonces (sin mirar al futuro); la columna `beats_market` de
-`politician_scorecard` y las alertas 🏆 usan la misma regla con los datos de hoy.
+* `trumpito`: **compras en sectores que vigila el comité del congresista** (conflicto),
+  la estrategia que mejor ha funcionado en la prueba histórica.
+* `pelosi`: réplica de Nancy Pelosi. `congreso`: todo el Congreso, como referencia.
 
 * Entrada al cierre del primer día hábil después de la fecha de declaración (sin mirar al futuro).
 * Salida cuando el político declara la venta del mismo ticker o tras `max_hold_days`.
 * Peso por importe declarado (punto medio del rango) con tope `max_lot_usd`.
 * Índice diario ponderado en el tiempo (base 100) frente a SPY.
 * Las opciones se tratan como exposición al subyacente.
+* La regla `ranking_rule` ("bate al mercado") sigue disponible como `include: ["beaters"]`.
 
 ## Puesta en marcha
 

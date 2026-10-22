@@ -59,7 +59,8 @@
     "followed_min_amount": 1001,
     "followed_include_sells": true,
     "cluster_min_politicians": 3,
-    "cluster_window_days": 30
+    "cluster_window_days": 30,
+    "watchlist_min_red_flags": 2
   },
   "scorecard": {
     "horizons_days": [
@@ -72,29 +73,9 @@
   "portfolios": [
     {
       "id": "trumpito",
-      "name": "Trumpito ETF (políticos que baten al mercado)",
-      "include": [
-        "beaters"
-      ],
-      "weighting": "amount",
-      "max_lot_usd": 100000,
-      "max_hold_days": 365
-    },
-    {
-      "id": "conflictos",
-      "name": "Solo compras en sectores de su comité",
+      "name": "Trumpito ETF (compras en sectores de su comité)",
       "include": [
         "conflict"
-      ],
-      "weighting": "amount",
-      "max_lot_usd": 100000,
-      "max_hold_days": 365
-    },
-    {
-      "id": "liderazgo",
-      "name": "Conflicto + preside/ranking del comité",
-      "include": [
-        "leadership_conflict"
       ],
       "weighting": "amount",
       "max_lot_usd": 100000,
