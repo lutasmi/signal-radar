@@ -103,23 +103,56 @@ tono sobrio) sobre carteras simuladas que copian operaciones declaradas por cong
 Usa SOLO las cifras proporcionadas; no inventes datos ni des recomendaciones de inversión."""
 
 
+USAGE_WORKSHEET_NAME = "agent_usage"
+USAGE_HEADER = [
+    "run_at", "month", "component", "calls", "input_tokens", "output_tokens",
+    "web_search_requests", "estimated_usd",
+]
+# Conservative USD prices per million tokens (input, output). Kept on the high side on
+# purpose so the budget guard stops early rather than late. Override in config.
+DEFAULT_PRICES = {
+    "claude-haiku-5-5": [1.0, 5.0],
+    "claude-sonnet-5-5": [2.0, 10.0],
+    "claude-opus-5-5": [4.0, 20.0],
+}
+DEFAULT_SEARCH_PRICE = 0.01  # USD per web search
+
+
+class BudgetExceeded(RuntimeError):
+    pass
+
+
 def api_key():
     return os.getenv("ANTHROPIC_API_KEY", "").strip()
 
 
 class AgentClient:
-    def __init__(self, session, config, key=None):
+    def __init__(self, session, config, key=None, spent_this_month=0.0):
         self.session = session
         self.config = config
         self.key = key if key is not None else api_key()
         self.usage = {"input_tokens": 0, "output_tokens": 0, "web_search_requests": 0, "calls": 0}
+        self.cost = 0.0
+        self.spent_before = spent_this_month
+        self.budget = float(config.get("monthly_budget_usd", 3))
 
     @property
     def enabled(self):
-        return bool(self.key) and self.config.get("enabled", True)
+        return bool(self.key) and self.config.get("enabled", True) and self.remaining() > 0
+
+    def remaining(self):
+        return self.budget - self.spent_before - self.cost
+
+    def _price(self, model):
+        prices = {**DEFAULT_PRICES, **self.config.get("prices_per_mtok", {})}
+        return prices.get(model, [4.0, 20.0])
 
     # transport ------------------------------------------------------------
     def _post(self, payload, timeout=600):
+        if self.remaining() <= 0:
+            raise BudgetExceeded(
+                f"monthly agent budget reached ({self.budget} USD); skipping Claude call"
+            )
         headers = {
             "x-api-key": self.key,
             "anthropic-version": API_VERSION,
@@ -139,7 +172,14 @@ class AgentClient:
             self.usage["calls"] += 1
             self.usage["input_tokens"] += usage.get("input_tokens", 0) + usage.get("cache_read_input_tokens", 0)
             self.usage["output_tokens"] += usage.get("output_tokens", 0)
-            self.usage["web_search_requests"] += (usage.get("server_tool_use") or {}).get("web_search_requests", 0)
+            searches = (usage.get("server_tool_use") or {}).get("web_search_requests", 0)
+            self.usage["web_search_requests"] += searches
+            price_in, price_out = self._price(payload.get("model", ""))
+            self.cost += (
+                (usage.get("input_tokens", 0) + usage.get("cache_creation_input_tokens", 0)) * price_in
+                + usage.get("cache_read_input_tokens", 0) * price_in * 0.1
+                + usage.get("output_tokens", 0) * price_out
+            ) / 1_000_000 + searches * self.config.get("search_price_usd", DEFAULT_SEARCH_PRICE)
             return data
         raise RuntimeError(f"Anthropic API unavailable: {last}")
 
@@ -147,8 +187,21 @@ class AgentClient:
         u = self.usage
         return (
             f"Claude usage: {u['calls']} calls, {u['input_tokens']} input tokens, "
-            f"{u['output_tokens']} output tokens, {u['web_search_requests']} web searches"
+            f"{u['output_tokens']} output tokens, {u['web_search_requests']} web searches, "
+            f"~{self.cost:.3f} USD (month so far ~{self.spent_before + self.cost:.2f} / {self.budget} USD)"
         )
+
+    def usage_record(self, component):
+        from datetime import datetime, timezone
+
+        now = datetime.now(timezone.utc).replace(microsecond=0)
+        return {
+            "run_at": now.isoformat(),
+            "month": now.strftime("%Y-%m"),
+            "component": component,
+            **self.usage,
+            "estimated_usd": round(self.cost, 4),
+        }
 
     # scanned PTR extraction ----------------------------------------------
     def extract_scanned_ptr(self, pdf_bytes, filer_name, doc_id, cache_dir=CACHE_DIR):
@@ -197,7 +250,7 @@ class AgentClient:
         return result
 
     # trade investigation --------------------------------------------------
-    def review_trades(self, context_text, tickers, max_searches=6, max_turns=8):
+    def review_trades(self, context_text, tickers, max_searches=2, max_turns=6):
         """Research a disclosure with web search and return per-ticker assessments."""
         messages = [{"role": "user", "content": context_text}]
         tools = [
@@ -241,3 +294,33 @@ class AgentClient:
             }
         )
         return "\n".join(b["text"] for b in data.get("content", []) if b.get("type") == "text").strip()
+
+
+# ---------------------------------------------------------------------------
+# budget ledger (Google Sheets: agent_usage)
+# ---------------------------------------------------------------------------
+
+
+def month_spend(sheet, month=None):
+    """Estimated USD already spent this month according to the agent_usage sheet."""
+    from datetime import datetime, timezone
+
+    from radar.sheets import read_records_or_empty
+
+    month = month or datetime.now(timezone.utc).strftime("%Y-%m")
+    total = 0.0
+    for row in read_records_or_empty(sheet, USAGE_WORKSHEET_NAME):
+        if row.get("month") == month:
+            try:
+                total += float(row.get("estimated_usd") or 0)
+            except ValueError:
+                continue
+    return total
+
+
+def record_usage(sheet, client, component):
+    if client is None or not client.usage["calls"]:
+        return
+    from radar.sheets import append_records
+
+    append_records(sheet, USAGE_WORKSHEET_NAME, USAGE_HEADER, [client.usage_record(component)])

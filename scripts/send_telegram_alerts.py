@@ -326,17 +326,30 @@ def pending_alerts(review_rows, sent_alert_ids, signal_lookup=None):
     return alerts
 
 
-def send_telegram_message(token, chat_id, message):
-    response = requests.post(
-        f"https://api.telegram.org/bot{token}/sendMessage",
-        json={
-            "chat_id": chat_id,
-            "text": message,
-            "disable_web_page_preview": True,
-        },
-        timeout=20,
-    )
-    if not response.ok:
+def send_telegram_message(token, chat_id, message, attempts=4):
+    """Send one message, honouring Telegram's 429 retry_after and pacing ~1 msg/s."""
+    import time
+
+    for attempt in range(attempts):
+        response = requests.post(
+            f"https://api.telegram.org/bot{token}/sendMessage",
+            json={
+                "chat_id": chat_id,
+                "text": message[:4000],
+                "disable_web_page_preview": True,
+            },
+            timeout=20,
+        )
+        if response.ok:
+            time.sleep(1.1)
+            return
+        if response.status_code == 429 and attempt < attempts - 1:
+            try:
+                wait = int(response.json().get("parameters", {}).get("retry_after", 5))
+            except ValueError:
+                wait = 5
+            time.sleep(min(wait + 1, 60))
+            continue
         raise RuntimeError(
             f"Telegram API error {response.status_code}: {response.text[:500]}"
         )
@@ -359,6 +372,36 @@ def alert_log_record(alert_id, row, message, sent_at):
     }
 
 
+MAX_DETAILED_ALERTS = 3  # per run; everything else goes into one digest message
+DIGEST_MAX_LINES = 15
+
+
+def is_actionable(row):
+    """Skip rows without a real ticker (e.g. private funds reported as 'NONE')."""
+    ticker = get_value(row, "ticker").upper()
+    return bool(ticker) and ticker not in {"NONE", "N/A", "--"}
+
+
+def score_value(row):
+    try:
+        return float(get_value(row, "score") or 0)
+    except ValueError:
+        return 0.0
+
+
+def build_digest(alerts):
+    lines = [f"Signal Radar · {len(alerts)} oportunidades más en review_queue", ""]
+    for _, row, _ in alerts[:DIGEST_MAX_LINES]:
+        lines.append(
+            f"• {get_value(row, 'ticker')} · {get_value(row, 'opportunity_type')} · "
+            f"score {get_value(row, 'score')} ({get_value(row, 'score_band')})"
+        )
+    if len(alerts) > DIGEST_MAX_LINES:
+        lines.append(f"• … y {len(alerts) - DIGEST_MAX_LINES} más")
+    lines += ["", "Detalle: pestaña review_queue en Google Sheets"]
+    return "\n".join(lines)
+
+
 def send_alerts(dry_run=False):
     load_dotenv()
     from radar.sheets import open_sheet
@@ -375,13 +418,22 @@ def send_alerts(dry_run=False):
         signals = []
     signal_lookup = build_signal_lookup(signals)
     sent_ids = existing_alert_ids(alert_log_records(sheet))
-    alerts = pending_alerts(review_rows, sent_ids, signal_lookup=signal_lookup)
+    alerts = [
+        alert
+        for alert in pending_alerts(review_rows, sent_ids, signal_lookup=signal_lookup)
+        if is_actionable(alert[1])
+    ]
+    alerts.sort(key=lambda alert: -score_value(alert[1]))
+    detailed, rest = alerts[:MAX_DETAILED_ALERTS], alerts[MAX_DETAILED_ALERTS:]
 
-    print(f"Alert candidates: {len(alerts)}")
+    print(f"Alert candidates: {len(alerts)} ({len(detailed)} detailed, {len(rest)} in digest)")
     if dry_run:
-        for _, _, message in alerts:
+        for _, _, message in detailed:
             print("\n--- DRY RUN TELEGRAM MESSAGE ---")
             print(message)
+        if rest:
+            print("\n--- DRY RUN DIGEST ---")
+            print(build_digest(rest))
         print("Dry-run complete: no Telegram messages sent and no alert log written.")
         return alerts
 
@@ -389,12 +441,19 @@ def send_alerts(dry_run=False):
 
     sent_at = now_iso()
     log_records = []
-    for alert_id, row, message in alerts:
-        send_telegram_message(token, chat_id, message)
-        log_records.append(alert_log_record(alert_id, row, message, sent_at))
-
-    append_alert_log(sheet, log_records)
-    print(f"Telegram alerts sent: {len(log_records)}")
+    try:
+        for alert_id, row, message in detailed:
+            send_telegram_message(token, chat_id, message)
+            log_records.append(alert_log_record(alert_id, row, message, sent_at))
+        if rest:
+            digest = build_digest(rest)
+            send_telegram_message(token, chat_id, digest)
+            for alert_id, row, _ in rest:
+                log_records.append(alert_log_record(alert_id, row, "DIGEST", sent_at))
+    finally:
+        # Log whatever was delivered, even if a later send failed, so nothing is resent.
+        append_alert_log(sheet, log_records)
+    print(f"Telegram alerts sent: {len(detailed)} detailed + digest of {len(rest)}")
     return alerts
 
 
@@ -511,6 +570,11 @@ def validate_dry_run_logic():
     ]:
         if expected not in message:
             raise ValueError(f"Telegram message missing expected text: {expected}")
+    if is_actionable({"ticker": "NONE"}) or not is_actionable({"ticker": "LMT"}):
+        raise ValueError("Rows without a real ticker must be skipped")
+    digest = build_digest([("a", {"ticker": f"T{n}", "opportunity_type": "X", "score": "50", "score_band": "HIGH"}, "") for n in range(20)])
+    if "• T0 · X · score 50 (HIGH)" not in digest or "… y 5 más" not in digest:
+        raise ValueError(f"Digest format unexpected:\n{digest}")
     return True
 
 

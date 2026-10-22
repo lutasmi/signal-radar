@@ -113,13 +113,22 @@
     "Other Securities"
   ],
   "agent": {
-    "_doc": "Claude (Anthropic API). Requires the ANTHROPIC_API_KEY secret; without it everything else keeps working.",
+    "_doc": "Claude (Anthropic API), optional: needs the ANTHROPIC_API_KEY secret. Low-cost defaults with a hard monthly budget tracked in the agent_usage sheet (prices are deliberately conservative estimates). Also set a spend limit in console.anthropic.com as a backstop.",
     "enabled": true,
-    "model": "claude-sonnet-5-5",
+    "monthly_budget_usd": 3,
+    "model": "claude-haiku-5-5",
+    "max_reviews_per_run": 1,
+    "max_reviews_per_day": 3,
+    "max_tickers_per_review": 3,
+    "max_searches_per_review": 2,
+    "review_min_conflict_score": 60,
+    "review_min_amount": 15001,
+    "review_clusters": false,
+    "vision": true,
     "vision_model": "claude-sonnet-5-5",
-    "max_vision_filings_per_run": 5,
-    "max_reviews_per_run": 6,
-    "max_searches_per_review": 6,
-    "weekly_memo": true
+    "vision_only_followed": true,
+    "vision_max_pages": 15,
+    "max_vision_filings_per_run": 2,
+    "weekly_memo": false
   }
 }

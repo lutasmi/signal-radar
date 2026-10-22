@@ -224,7 +224,38 @@ def validate_agent_logic():
         raise ValueError(f"agent: vision rows not normalized {txs}")
     if AgentClient(None, {}, key="").enabled:
         raise ValueError("agent: must be disabled without API key")
-    print("OK agent_logic: review loop (pause_turn/tool), cached vision extraction, graceful disable")
+
+    # Budget guard: cost is estimated from usage and calls stop at the monthly cap.
+    from radar.agent import BudgetExceeded
+
+    priced = AgentClient(None, {"monthly_budget_usd": 1.0}, key="test", spent_this_month=0.98)
+    fake = _FakeAnthropic([{"stop_reason": "end_turn", "content": [{"type": "text", "text": "memo"}],
+                            "usage": {"input_tokens": 10000, "output_tokens": 1000, "server_tool_use": {"web_search_requests": 1}}}])
+    priced.session = fake
+    priced.config["model"] = "claude-haiku-5-5"
+    priced.weekly_memo("facts")
+    expected = (10000 * 1.0 + 1000 * 5.0) / 1_000_000 + 0.01
+    if abs(priced.cost - expected) > 1e-9:
+        raise ValueError(f"agent: cost estimate {priced.cost} != {expected}")
+    if priced.enabled:
+        raise ValueError("agent: must disable itself once the monthly budget is used")
+    try:
+        priced.weekly_memo("again")
+        raise ValueError("agent: call allowed over budget")
+    except BudgetExceeded:
+        pass
+
+    from scripts import send_congress_alerts as alerts
+
+    cfg = {"review_min_conflict_score": 60, "review_min_amount": 15001}
+    row = {"ticker": "LMT", "trade_type": "buy", "conflict_score": "75", "amount_min": "1001"}
+    if not alerts.review_eligible(row, ["CONFLICTO"], cfg):
+        raise ValueError("agent: strong conflict buy must be reviewed")
+    if alerts.review_eligible({**row, "conflict_score": "50"}, ["CONFLICTO"], cfg):
+        raise ValueError("agent: weak conflict must not be reviewed")
+    if alerts.review_eligible(row, ["SEGUIDO"], cfg) or not alerts.review_eligible({**row, "amount_min": "50001"}, ["SEGUIDO"], cfg):
+        raise ValueError("agent: followed buys reviewed only above the amount threshold")
+    print("OK agent_logic: review loop, cached vision, budget guard, review eligibility")
     return 1
 
 

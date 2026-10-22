@@ -36,14 +36,14 @@ Trabaja siempre directamente sobre la rama:
 
 main
 
+Puedes hacer commit y push directamente a main cuando las validaciones
+(`python3 scripts/validate_all.py`) pasen. Autorizado por el Product Owner el 2026-10-22.
+
 Nunca:
 
 * crear ramas
 * crear Pull Requests
-* hacer commits
-* hacer push
-
-Deja siempre los cambios preparados para revisión.
+* hacer push con validaciones fallando
 
 ⸻
 

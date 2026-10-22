@@ -435,16 +435,37 @@ def review_context(group, prices, scorecard_lookup, buyers, tracker_config, toda
     return "\n".join(lines)
 
 
+def review_eligible(row, tags, agent_config):
+    """Only the strongest signals are worth paying for an investigation."""
+    if not get_value(row, "ticker") or get_value(row, "trade_type") != "buy":
+        return False
+    if "CONFLICTO" in tags and score_of(row) >= agent_config.get("review_min_conflict_score", 60):
+        return True
+    if "SEGUIDO" in tags and amount_min(row) >= agent_config.get("review_min_amount", 15001):
+        return True
+    return "CLUSTER" in tags and agent_config.get("review_clusters", False)
+
+
+def reviews_today(reviews, today=None):
+    day = (today or date.today()).isoformat()
+    return len({get_value(r, "filing_id") for r in reviews.values() if get_value(r, "reviewed_at").startswith(day)})
+
+
 def run_reviews(client, groups, already, prices, scorecard_lookup, buyers, tracker_config, max_reviews):
     """Investigate the highest-priority unreviewed disclosures. Returns review records."""
+    from radar.agent import BudgetExceeded
+
     agent_config = tracker_config.get("agent", {})
     records = []
     done = 0
     for group in groups:
         if done >= max_reviews:
             break
-        shown, _ = headline_rows(group)
-        rows = [(r, t) for r, t in shown if get_value(r, "ticker") and make_alert_id(r) not in already]
+        shown, _ = headline_rows(group, limit=agent_config.get("max_tickers_per_review", 3))
+        rows = [
+            (r, t) for r, t in shown
+            if make_alert_id(r) not in already and review_eligible(r, t, agent_config)
+        ]
         if not rows:
             continue
         tickers = sorted({get_value(r, "ticker") for r, _ in rows})
@@ -452,8 +473,11 @@ def run_reviews(client, groups, already, prices, scorecard_lookup, buyers, track
             assessments = client.review_trades(
                 review_context(rows, prices, scorecard_lookup, buyers, tracker_config),
                 tickers,
-                max_searches=agent_config.get("max_searches_per_review", 6),
+                max_searches=agent_config.get("max_searches_per_review", 2),
             )
+        except BudgetExceeded as exc:
+            print(f"Agent stopped: {exc}")
+            break
         except Exception as exc:
             print(f"WARNING: agent review failed for {get_value(rows[0][0], 'filing_id')}: {exc}")
             continue
@@ -555,16 +579,30 @@ def run(dry_run=False, max_messages=DEFAULT_MAX_MESSAGES, with_prices=True):
             prices.load(ticker)
 
     reviews = read_reviews(sheet)
-    client = AgentClient(requests.Session(), tracker_config.get("agent", {}))
-    if client.enabled and groups:
+    agent_config = tracker_config.get("agent", {})
+    from radar import agent as agent_module
+
+    client = None
+    if agent_module.api_key() and agent_config.get("enabled", True) and groups:
+        client = AgentClient(
+            requests.Session(), agent_config, spent_this_month=agent_module.month_spend(sheet)
+        )
+    allowance = min(
+        agent_config.get("max_reviews_per_run", 1),
+        agent_config.get("max_reviews_per_day", 3) - reviews_today(reviews),
+    )
+    if client is not None and client.enabled and allowance > 0:
         new_reviews = run_reviews(
-            client, groups, set(reviews), prices, scorecard_lookup, buyers, tracker_config,
-            tracker_config.get("agent", {}).get("max_reviews_per_run", 6),
+            client, groups, set(reviews), prices, scorecard_lookup, buyers, tracker_config, allowance
         )
         if new_reviews and not dry_run:
             append_rows(sheet, REVIEW_WORKSHEET_NAME, REVIEW_HEADER, new_reviews)
         reviews.update({r["alert_id"]: r for r in new_reviews})
         print(f"Agent reviews this run: {len(new_reviews)} · {client.usage_line()}")
+        if not dry_run:
+            agent_module.record_usage(sheet, client, "review")
+    elif client is not None:
+        print(f"Agent review skipped (allowance {allowance}, budget left ~{client.remaining():.2f} USD)")
 
     messages = [
         (group, build_message(group, prices, scorecard_lookup, buyers, tracker_config, reviews))
@@ -597,10 +635,14 @@ def run(dry_run=False, max_messages=DEFAULT_MAX_MESSAGES, with_prices=True):
             )
 
     to_send, skipped = messages[:max_messages], messages[max_messages:]
-    for group, message in to_send:
-        for chunk_start in range(0, len(message), 3900):  # Telegram limit is 4096 chars
-            telegram.send_telegram_message(token, chat_id, message[chunk_start:chunk_start + 3900])
-        log(group, message, "SENT")
+    try:
+        for group, message in to_send:
+            for chunk_start in range(0, len(message), 3900):  # Telegram limit is 4096 chars
+                telegram.send_telegram_message(token, chat_id, message[chunk_start:chunk_start + 3900])
+            log(group, message, "SENT")
+    except Exception:
+        telegram.append_alert_log(sheet, log_records)  # never resend what was delivered
+        raise
     if skipped:
         extra = sum(len(group) for group, _ in skipped)
         telegram.send_telegram_message(

@@ -15,7 +15,7 @@ on:
       max_vision:
         description: "Max new scanned filings read with Claude during a backfill (cost control)"
         required: false
-        default: "25"
+        default: "5"
         type: string
       alerts_dry_run:
         description: "Print alerts instead of sending them to Telegram"
@@ -83,7 +83,7 @@ jobs:
           BACKFILL_SINCE: ${{ inputs.backfill_since }}
         run: |
           if [ -n "$BACKFILL_SINCE" ]; then
-            python3 collectors/collect_congress_ptr.py --since "$BACKFILL_SINCE" --max-filings 5000 --delay 0.2 --max-vision "${MAX_VISION:-25}"
+            python3 collectors/collect_congress_ptr.py --since "$BACKFILL_SINCE" --max-filings 5000 --delay 0.2 --max-vision "${MAX_VISION:-5}"
           else
             python3 collectors/collect_congress_ptr.py --days 7
           fi

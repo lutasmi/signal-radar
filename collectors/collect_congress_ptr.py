@@ -443,7 +443,10 @@ def collect_house(session, since, until, max_filings, delay, vision=None,
         url = HOUSE_PTR_URL.format(year=filing["year"] or filing["filing_date"].year, doc_id=filing["doc_id"])
         transactions = None
         cached = vision is not None and vision.is_cached(filing["doc_id"])
-        if vision is not None and (cached or vision_used < max_vision):
+        eligible = vision is not None and (
+            not vision.only_followed or filing["last"].lower() in priority_names
+        )
+        if cached or (eligible and vision_used < max_vision):
             vision_used += 0 if cached else 1  # count attempts, not successes (cost cap)
             try:
                 content = b"" if cached else get_with_retry(session, url).content
@@ -793,10 +796,16 @@ def print_summary(rows):
 
 
 class VisionReader:
-    """Thin adapter so collect_house does not depend on the agent module directly."""
+    """Thin adapter so collect_house does not depend on the agent module directly.
 
-    def __init__(self, client):
+    Cost guards: only followed politicians (configurable), and long scans (e.g.
+    full brokerage statements) above `vision_max_pages` are left for manual review.
+    """
+
+    def __init__(self, client, only_followed=True, max_pages=15):
         self.client = client
+        self.only_followed = only_followed
+        self.max_pages = max_pages
 
     def is_cached(self, doc_id):
         from radar.agent import CACHE_DIR
@@ -804,18 +813,48 @@ class VisionReader:
         return (CACHE_DIR / "vision" / f"{doc_id}.json").exists()
 
     def extract(self, pdf_bytes, filer_name, doc_id):
+        if pdf_bytes:
+            import pdfplumber
+
+            with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
+                pages = len(pdf.pages)
+            if pages > self.max_pages:
+                raise ValueError(f"{pages} pages > vision_max_pages {self.max_pages}; left for manual review")
         return self.client.extract_scanned_ptr(pdf_bytes, filer_name, doc_id)
 
 
-def build_vision_reader():
+def build_vision_reader(sheet=None):
     from radar import agent, tracker
 
     agent_config = tracker.load_tracker_config().get("agent", {})
-    client = agent.AgentClient(requests.Session(), agent_config)
-    if not client.enabled:
-        print("Claude vision disabled (no ANTHROPIC_API_KEY): scanned filings listed for manual review")
+    spent = 0.0
+    if sheet is not None and agent.api_key():
+        try:
+            spent = agent.month_spend(sheet)
+        except Exception as exc:
+            print(f"WARNING: could not read agent_usage ledger: {exc}")
+    client = agent.AgentClient(requests.Session(), agent_config, spent_this_month=spent)
+    if not agent_config.get("vision", True) or not client.enabled:
+        reason = "budget reached" if client.key and client.remaining() <= 0 else "disabled or no ANTHROPIC_API_KEY"
+        print(f"Claude vision off ({reason}): scanned filings listed for manual review")
         return None, agent_config, None
-    return VisionReader(client), agent_config, client
+    reader = VisionReader(
+        client,
+        only_followed=agent_config.get("vision_only_followed", True),
+        max_pages=agent_config.get("vision_max_pages", 15),
+    )
+    return reader, agent_config, client
+
+
+def open_ledger_sheet():
+    """Google Sheet used for the agent budget ledger (None when not configured)."""
+    try:
+        from radar.sheets import open_sheet
+
+        return open_sheet()
+    except Exception as exc:
+        print(f"WARNING: Google Sheets unavailable for agent ledger: {exc}")
+        return None
 
 
 def parse_args():
@@ -842,8 +881,11 @@ def main():
 
     raw_rows = []
     failures = []
-    vision, agent_config, agent_client = build_vision_reader()
-    max_vision = args.max_vision if args.max_vision is not None else agent_config.get("max_vision_filings_per_run", 5)
+    from radar import agent as agent_module
+
+    ledger = open_ledger_sheet() if agent_module.api_key() else None
+    vision, agent_config, agent_client = build_vision_reader(ledger)
+    max_vision = args.max_vision if args.max_vision is not None else agent_config.get("max_vision_filings_per_run", 2)
     from radar import tracker
 
     priority = {  # last names of followed politicians: their scans are read first
@@ -888,6 +930,8 @@ def main():
 
     if agent_client is not None:
         print(agent_client.usage_line())
+        if ledger is not None:
+            agent_module.record_usage(ledger, agent_client, "vision")
     if failures:
         print("\nPartial failures: " + " | ".join(failures))
     if not rows and failures:

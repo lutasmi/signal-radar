@@ -37,17 +37,24 @@ desde la operación y desde la declaración, otros compradores, historial del po
 si la cartera réplica compra y, si hay API key, la evaluación del agente (sospecha 1-5,
 tesis, catalizadores y fuentes). Deduplicadas en `telegram_alert_log`.
 
-## Agente (Claude)
+## Agente (Claude) — diseñado para coste mínimo
 
 Opcional: requiere el secret `ANTHROPIC_API_KEY`. Sin él todo lo demás funciona.
 
-* **Visión**: lee declaraciones escaneadas de la Cámara (primero las de políticos seguidos).
-  Resultado cacheado por DocID; nunca se paga dos veces. Filas marcadas `extraction = claude_vision`.
-* **Investigación**: para cada declaración que dispara alerta, busca en la web contratos,
-  actividad del comité, regulación y noticias, y escribe en `agent_review`.
-* **Comentario semanal** en el resumen de los lunes (solo con las cifras calculadas).
-* Límites en `config/tracker.json -> agent` (modelo, revisiones y escaneos por ejecución,
-  búsquedas por revisión). Los cálculos numéricos nunca los hace el modelo.
+* **Tope mensual duro** (`monthly_budget_usd`, por defecto 3 USD). Cada llamada estima su
+  coste con precios conservadores y se apunta en la hoja `agent_usage`; al llegar al tope el
+  agente se apaga hasta el mes siguiente. Pon además un límite en console.anthropic.com.
+* **Investigación** (modelo barato `claude-haiku-5-5`, 2 búsquedas, máx. 3 tickers): solo
+  compras en conflicto con score ≥ 60 o compras de políticos seguidos desde 15.001 USD;
+  1 por ejecución y 3 al día. Resultado en `agent_review` y en la alerta.
+* **Visión** (`claude-sonnet-5-5`): solo declaraciones escaneadas de políticos seguidos y de
+  hasta 15 páginas (los extractos de broker largos quedan para revisión manual); máx. 2 por
+  ejecución, cacheadas por DocID.
+* **Comentario semanal**: desactivado por defecto (`weekly_memo`).
+* Los cálculos numéricos nunca los hace el modelo.
+
+Coste orientativo con estos valores: ~0,05 USD por investigación y ~0,10 USD por escaneo
+corto; en uso normal 1–3 USD/mes y nunca más del tope configurado.
 
 ## Carteras réplica
 
@@ -65,7 +72,7 @@ Definidas en `config/tracker.json -> portfolios` (`trumpito`: seguidos + conflic
 1. Secrets de GitHub: `GOOGLE_CREDENTIALS_JSON`, `GOOGLE_SHEETS_ID`, `TELEGRAM_BOT_TOKEN`,
    `TELEGRAM_CHAT_ID`, `SEC_USER_AGENT` y, opcional, `ANTHROPIC_API_KEY`.
 2. Actions → Congress watch → Run workflow con `backfill_since = 2024-01-01`
-   (`max_vision` limita cuántos escaneados lee Claude en la carga histórica).
+   (`max_vision`, por defecto 5, limita cuántos escaneados lee Claude en la carga histórica).
 3. A partir de ahí corre solo cada 2 horas; el propio workflow evita que GitHub lo desactive.
 
 ## Limitaciones conocidas

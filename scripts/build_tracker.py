@@ -215,7 +215,11 @@ def main():
         if agent_config.get("weekly_memo"):
             from radar.agent import AgentClient
 
-            client = AgentClient(requests.Session(), agent_config)
+            from radar import agent as agent_module
+
+            client = AgentClient(
+                requests.Session(), agent_config, spent_this_month=agent_module.month_spend(sheet)
+            )
             if client.enabled:
                 try:
                     memo = client.weekly_memo(message)
@@ -223,6 +227,7 @@ def main():
                         message = f"{message}\n\n🤖 Comentario:\n{memo}"
                 except Exception as exc:
                     print(f"WARNING: weekly memo failed: {exc}")
+                agent_module.record_usage(sheet, client, "weekly_memo")
         token, chat_id = telegram.telegram_credentials()
         telegram.send_telegram_message(token, chat_id, message[:4000])
         print("Weekly digest sent")
