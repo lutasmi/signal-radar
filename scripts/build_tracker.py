@@ -118,15 +118,10 @@ def load_prices(trades, session, refresh=True):
     for trade in trades:
         last_filing[trade["ticker"]] = max(last_filing.get(trade["ticker"], trade["filing_date"]), trade["filing_date"])
     yesterday = last_weekday(prices.today) - timedelta(days=1)
+    need = {t: min(yesterday, last_filing[t] + timedelta(days=400)) for t in last_filing}
     print(f"Tickers needing prices: {len(tickers)}")
-    for i, ticker in enumerate(tickers, start=1):
-        need = yesterday
-        if ticker in last_filing:
-            need = min(yesterday, last_filing[ticker] + timedelta(days=400))
-        prices.load(ticker, need_until=need)
-        if i % 100 == 0:
-            print(f"  prices loaded: {i}/{len(tickers)} (downloads {prices.downloads})")
-    print(f"Price downloads this run: {prices.downloads}; failed tickers: {len(prices.failed)}")
+    refreshed = prices.prefetch(tickers, need)
+    print(f"Tickers refreshed: {refreshed}; downloaded: {prices.downloads}; failed: {len(prices.failed)}")
     return prices
 
 

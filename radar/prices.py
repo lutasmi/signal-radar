@@ -1,7 +1,8 @@
 """Daily price history with a local CSV cache (data/reference/prices/).
 
-Source: Yahoo Finance chart API (query1, fallback query2). Adjusted closes are
-used so returns include splits/dividends. The cache is persisted between
+Source: Yahoo Finance via the yfinance library (batched downloads; it handles the
+cookies/TLS fingerprint Yahoo requires from cloud IPs), with the raw chart API as
+fallback. Adjusted closes are used so returns include splits/dividends. The cache is persisted between
 GitHub Actions runs with actions/cache, so after the first backfill only a
 short recent window is downloaded per ticker.
 """
@@ -123,37 +124,105 @@ class PriceStore:
             time.sleep(1.5 * (attempt + 1))
         raise RuntimeError(f"price download failed for {ticker}: {last_error}")
 
-    def load(self, ticker, need_until=None):
-        """Load a ticker's history, refreshing the cache when it is stale."""
-        ticker = ticker.upper().strip()
-        if not ticker or ticker in self.failed:
-            return False
+    def _cache_loaded(self, ticker):
         if ticker not in self._series:
             cached = self._read_cache(ticker)
             if cached:
                 self._set(ticker, cached)
-        need_until = need_until or last_weekday(self.today) - timedelta(days=1)
-        dates = self._series.get(ticker, ([], []))[0]
-        stale = not dates or dates[-1] < need_until
-        if stale and self.refresh:
+        return self._series.get(ticker, ([], []))[0]
+
+    def _yf_download(self, tickers, start):
+        """Batch download with yfinance. Returns {ticker: [(date, adjclose), ...]}."""
+        import pandas as pd
+        import yfinance as yf
+
+        symbols = {yahoo_symbol(t): t for t in tickers}
+        frame = yf.download(
+            tickers=list(symbols),
+            start=start.isoformat(),
+            interval="1d",
+            auto_adjust=True,
+            progress=False,
+            group_by="ticker",
+            threads=True,
+            multi_level_index=True,
+        )
+        result = {}
+        if frame is None or frame.empty:
+            return result
+        for symbol, ticker in symbols.items():
+            try:
+                if isinstance(frame.columns, pd.MultiIndex):
+                    series = frame[symbol]["Close"]
+                else:
+                    series = frame["Close"]
+            except KeyError:
+                continue
+            points = [(idx.date(), float(value)) for idx, value in series.dropna().items()]
+            if points:
+                result[ticker] = points
+        return result
+
+    def prefetch(self, tickers, need_until=None, batch_size=80):
+        """Refresh every stale ticker, downloading in batches. need_until: date or {ticker: date}."""
+        default_need = last_weekday(self.today) - timedelta(days=1)
+        stale_new, stale_update = [], []
+        for ticker in sorted({t.upper().strip() for t in tickers if t and t.strip()}):
+            if ticker in self.failed:
+                continue
+            need = need_until.get(ticker, default_need) if isinstance(need_until, dict) else (need_until or default_need)
+            dates = self._cache_loaded(ticker)
+            if dates and dates[-1] >= need:
+                continue
             path = self._path(ticker)
-            recently_tried = path.exists() and time.time() - path.stat().st_mtime < 6 * 3600
-            if not (dates and recently_tried):
+            if dates and path.exists() and time.time() - path.stat().st_mtime < 6 * 3600:
+                continue  # tried recently (e.g. delisted or holiday): do not hammer the API
+            (stale_update if dates else stale_new).append(ticker)
+        if not self.refresh or not (stale_new or stale_update):
+            return 0
+        groups = [
+            (stale_new, self.today - timedelta(days=5 * 365)),
+            (stale_update, self.today - timedelta(days=90)),
+        ]
+        for group, start in groups:
+            for i in range(0, len(group), batch_size):
+                self._fetch_batch(group[i:i + batch_size], start)
+        return len(stale_new) + len(stale_update)
+
+    def _fetch_batch(self, batch, start):
+        fetched = {}
+        try:
+            fetched = self._yf_download(batch, start)
+        except Exception as exc:  # library missing or Yahoo error: try the raw API
+            print(f"WARNING: yfinance batch failed ({exc}); falling back to chart API")
+            for ticker in batch:
                 try:
-                    range_ = "3mo" if dates and (self.today - dates[-1]).days < 80 else "5y"
-                    fresh = self._download(ticker, range_)
-                    if fresh:
-                        merged = dict(zip(*self._series.get(ticker, ([], []))))
-                        merged.update(dict(fresh))
-                        self._set(ticker, merged.items())
-                        self._write_cache(ticker)
-                    elif dates:
-                        self._path(ticker).touch()
-                except Exception as exc:
-                    print(f"WARNING: {exc}")
-                    self.failed.add(ticker)
-                time.sleep(0.15)
-        return ticker in self._series and bool(self._series[ticker][0])
+                    points = self._download(ticker, "5y")
+                    if points:
+                        fetched[ticker] = points
+                except Exception as inner:
+                    print(f"WARNING: {inner}")
+                time.sleep(0.3)
+        self.downloads += len(fetched)
+        for ticker in batch:
+            points = fetched.get(ticker)
+            if points:
+                merged = dict(zip(*self._series.get(ticker, ([], []))))
+                merged.update(dict(points))
+                self._set(ticker, merged.items())
+                self._write_cache(ticker)
+            elif self._series.get(ticker, ([], []))[0]:
+                self._path(ticker).touch()
+            else:
+                self.failed.add(ticker)
+
+    def load(self, ticker, need_until=None):
+        """Load one ticker (refreshing it if stale). Prefer prefetch() for many tickers."""
+        ticker = ticker.upper().strip()
+        if not ticker:
+            return False
+        self.prefetch([ticker], need_until)
+        return self.has(ticker)
 
     # queries -------------------------------------------------------------
     def has(self, ticker):

@@ -90,7 +90,15 @@ jobs:
 
       - name: Load Congress PTR into Google Sheets
         if: ${{ steps.collect.outcome == 'success' }}
-        run: python3 loaders/load_congress_ptr_csv_to_sheets.py
+        env:
+          BACKFILL_SINCE: ${{ inputs.backfill_since }}
+        run: |
+          # A full backfill rebuilds the tab from scratch; regular runs append new rows.
+          if [ -n "$BACKFILL_SINCE" ]; then
+            python3 loaders/load_congress_ptr_csv_to_sheets.py --replace
+          else
+            python3 loaders/load_congress_ptr_csv_to_sheets.py
+          fi
 
       - name: Sheet health report
         continue-on-error: true

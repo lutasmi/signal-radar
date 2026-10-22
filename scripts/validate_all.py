@@ -259,6 +259,88 @@ def validate_agent_logic():
     return 1
 
 
+class _GridSheet:
+    """Minimal gspread worksheet with a real grid to test explicit-range writes."""
+
+    def __init__(self, values=None, rows=2, cols=3):
+        self.values = [list(r) for r in (values or [])]
+        self.row_count, self.col_count = max(rows, len(self.values)), cols
+        self.calls = []
+
+    def get_all_values(self):
+        return [list(r) for r in self.values]
+
+    def add_rows(self, n):
+        self.row_count += n
+
+    def add_cols(self, n):
+        self.col_count += n
+
+    def insert_row(self, row, index, value_input_option=None):
+        self.values.insert(index - 1, list(row))
+        self.row_count += 1
+
+    def clear(self):
+        self.values = []
+
+    def update(self, values=None, range_name=None, value_input_option=None):
+        start = int(range_name[1:])
+        if start + len(values) - 1 > self.row_count or max(len(v) for v in values) > self.col_count:
+            raise ValueError("write outside grid")
+        while len(self.values) < start - 1 + len(values):
+            self.values.append([])
+        for i, row in enumerate(values):
+            self.values[start - 1 + i] = list(row)
+        self.calls.append(range_name)
+
+
+def validate_sheet_writes():
+    from radar.sheets import append_rows, write_rows
+
+    ws = _GridSheet()
+    append_rows(ws, ["a", "b"], [["1", ""], ["2", "x"]])
+    append_rows(ws, ["a", "b"], [["3", ""]])
+    if ws.values != [["a", "b"], ["1", ""], ["2", "x"], ["3", ""]] or ws.calls != ["A1", "A4"]:
+        raise ValueError(f"sheets: explicit appends misplaced rows {ws.values} {ws.calls}")
+    headerless = _GridSheet([["9", "z"]])
+    append_rows(headerless, ["a", "b"], [["1", "y"]])
+    if headerless.values[0] != ["a", "b"] or headerless.values[-1] != ["1", "y"]:
+        raise ValueError("sheets: header must be restored in row 1")
+    big = _GridSheet()
+    write_rows(big, 1, [[str(i), "v", "w", "extra"] for i in range(12001)])
+    if big.calls != ["A1", "A5001", "A10001"] or len(big.values) != 12001:
+        raise ValueError("sheets: large writes must be chunked and the grid grown")
+    print("OK sheet_writes: explicit ranges, header guard, chunking")
+    return 1
+
+
+def validate_price_parsing():
+    """yfinance batch parsing with a frame shaped like the real library output."""
+    from datetime import date
+
+    import pandas as pd
+    import yfinance
+
+    from radar.prices import PriceStore
+
+    index = pd.to_datetime(["2026-10-19", "2026-10-20"])
+    columns = pd.MultiIndex.from_product([["LMT", "BRK-B"], ["Open", "Close"]])
+    frame = pd.DataFrame([[1, 500.0, 1, 400.0], [1, 510.0, 1, float("nan")]], index=index, columns=columns)
+    original = yfinance.download
+    yfinance.download = lambda **kwargs: frame
+    try:
+        store = PriceStore(today=date(2026, 10, 21))
+        parsed = store._yf_download(["LMT", "BRK.B", "MISSING"], date(2026, 1, 1))
+    finally:
+        yfinance.download = original
+    if parsed.get("LMT") != [(date(2026, 10, 19), 500.0), (date(2026, 10, 20), 510.0)]:
+        raise ValueError(f"prices: LMT parsed wrong {parsed.get('LMT')}")
+    if parsed.get("BRK.B") != [(date(2026, 10, 19), 400.0)] or "MISSING" in parsed:
+        raise ValueError(f"prices: symbol mapping / NaN handling wrong {parsed}")
+    print("OK price_parsing: yfinance batch frame, symbol mapping, NaN dropped")
+    return 1
+
+
 def validate_conflict_logic():
     config = conflicts.load_config()
     resolver = conflicts.SectorResolver(config, session=None)
@@ -434,6 +516,8 @@ def validate_all(require_csv=True, csv_dir=FIXTURE_CSV_DIR):
     summary.append(("conflict_logic", validate_conflict_logic()))
     summary.append(("tracker_logic", validate_tracker_logic()))
     summary.append(("agent_logic", validate_agent_logic()))
+    summary.append(("sheet_writes", validate_sheet_writes()))
+    summary.append(("price_parsing", validate_price_parsing()))
     candidate_summary = validate_candidate_sources.validate_candidate_sources()
     summary.append(("candidate_sources", len(candidate_summary)))
     if csv_dir == validate_pipeline.resolve_csv_dir(GENERATED_CSV_DIR):

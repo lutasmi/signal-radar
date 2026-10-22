@@ -575,8 +575,7 @@ def run(dry_run=False, max_messages=DEFAULT_MAX_MESSAGES, with_prices=True):
     prices = None
     if with_prices and groups:
         prices = PriceStore(session=requests.Session())
-        for ticker in sorted({get_value(r, "ticker") for g in groups for r, _ in g if get_value(r, "ticker")}):
-            prices.load(ticker)
+        prices.prefetch({get_value(r, "ticker") for g in groups for r, _ in g if get_value(r, "ticker")})
 
     reviews = read_reviews(sheet)
     agent_config = tracker_config.get("agent", {})
