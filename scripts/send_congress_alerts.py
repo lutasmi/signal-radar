@@ -93,6 +93,16 @@ def _d(value):
     return parse_date(value or "")
 
 
+def to_float(value):
+    """Parse numbers read back from Sheets, which may use a Spanish locale ("12,5")."""
+    text = (value or "").strip().replace("%", "")
+    if "," in text and "." in text:
+        text = text.replace(".", "").replace(",", ".")
+    elif "," in text:
+        text = text.replace(",", ".")
+    return float(text)
+
+
 def amount_min(row):
     try:
         return int(get_value(row, "amount_min") or 0)
@@ -238,11 +248,11 @@ def scorecard_line(row, scorecard_lookup):
     excess = get_value(sc, "avg_excess_90d")
     hit = get_value(sc, "hit_rate")
     try:
-        excess_txt = fmt_pct(float(excess))
+        excess_txt = fmt_pct(to_float(excess))
     except ValueError:
         excess_txt = "n/d"
     try:
-        hit_txt = f"{float(hit):.0f}%"
+        hit_txt = f"{to_float(hit):.0f}%"
     except ValueError:
         hit_txt = "n/d"
     rank_txt = f"#{rank} · " if rank else ""
@@ -531,8 +541,8 @@ def top_keys_from_rows(rows, tracker_config):
     keys = []
     for r in rows:
         try:
-            evaluated = int(get_value(r, "evaluated_trades") or 0)
-            excess = float(get_value(r, "avg_excess_90d") or 0)
+            evaluated = int(to_float(get_value(r, "evaluated_trades") or "0"))
+            excess = to_float(get_value(r, "avg_excess_90d") or "0")
         except ValueError:
             continue
         if get_value(r, "rank") and evaluated >= alerts["top_scorecard_min_trades"] and excess > 0:
@@ -726,6 +736,11 @@ def validate_logic():
         raise ValueError(f"Agent review not rendered:\n{reviewed}")
     if "Operaciones declaradas" not in review_context([(base, ["CONFLICTO"])], prices, {}, {}, tracker_config, today):
         raise ValueError("Agent dossier incomplete")
+    line = scorecard_line(base, {"X0001": {"rank": "2", "evaluated_trades": "40", "avg_excess_90d": "6,25", "hit_rate": "61,5"}})
+    if "+6.2%" not in line or "aciertos 62%" not in line:
+        raise ValueError(f"Scorecard numbers with Spanish locale not parsed: {line}")
+    if to_float("1.234,5") != 1234.5 or to_float("7.5") != 7.5:
+        raise ValueError("to_float locale handling")
     sent = {make_alert_id(r) for r in rows}
     if pending_messages(rows, sent, conflict_config, tracker_config, prices, {}, (), today=today):
         raise ValueError("Already-sent alerts must not be resent")
