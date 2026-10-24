@@ -14,6 +14,7 @@ Alerts are deduplicated per trade in telegram_alert_log.
 """
 
 import argparse
+import re
 import sys
 from collections import OrderedDict, defaultdict
 from datetime import date, timedelta
@@ -60,9 +61,6 @@ REVIEW_HEADER = [
 
 CHAMBER_PREFIX = {"senate": "Sen.", "house": "Rep."}
 TRADE_LABEL = {"buy": "COMPRA", "sell": "VENTA", "sell_partial": "VENTA PARCIAL", "exchange": "CANJE"}
-TAG_EMOJI = {"CONFLICTO": "🚨", "SEGUIDO": "👀", "TOP": "🔎", "CLUSTER": "🧲", "PAPEL": "📄"}
-# "TOP" = politician on the insider watchlist (>= N red flags in politician_scorecard).
-TAG_LABEL = {"TOP": "VIGILADO (indicios de ventaja informativa)"}
 
 
 # ---------------------------------------------------------------------------
@@ -283,8 +281,8 @@ def replica_line(row, tracker_config, tags=()):
     ]
     if not names:
         return ""
-    verb = "compra" if get_value(row, "trade_type") == "buy" else "vende"
-    return f"Cartera réplica: {', '.join(names)} {verb} {get_value(row, 'ticker')} al cierre del próximo día hábil"
+    verb = "la compra" if get_value(row, "trade_type") == "buy" else "la vende"
+    return f"Tu cartera {', '.join(names)} {verb} el próximo día hábil."
 
 
 def headline_rows(group, limit=MAX_DETAILED_TRADES):
@@ -310,7 +308,7 @@ def review_lines(review):
         level = int(review.get("suspicion") or 0)
     except ValueError:
         level = 0
-    lines = [f"  🤖 Sospecha {level}/5: {review.get('thesis', '')}"]
+    lines = [f"🤖 Análisis IA (sospecha {level}/5): {review.get('thesis', '')}"]
     if review.get("catalysts"):
         lines.append(f"  Próximos catalizadores: {review['catalysts']}")
     sources = review.get("sources") or []
@@ -321,65 +319,208 @@ def review_lines(review):
     return lines
 
 
-def build_message(group, prices=None, scorecard_lookup=None, buyers=None, tracker_config=None, reviews=None):
+# ---------------------------------------------------------------------------
+# plain-language message
+# ---------------------------------------------------------------------------
+
+HEADLINES = {
+    "CONFLICTO": "🚨 Posible información privilegiada",
+    "TOP": "🔎 Compra de un político bajo vigilancia",
+    "SEGUIDO": "👀 Operación de un político que sigues",
+    "CLUSTER": "🧲 Varios políticos compran la misma acción",
+    "PAPEL": "📄 Nueva declaración en papel de un político que sigues",
+}
+PARTY_ES = {"Democrat": "demócrata", "Republican": "republicano", "Independent": "independiente"}
+MONTHS_ES = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"]
+COMMITTEE_ES = {
+    "Armed Services": "Fuerzas Armadas",
+    "Intelligence": "Inteligencia",
+    "Energy and Commerce": "Energía y Comercio",
+    "Financial Services": "Servicios Financieros",
+    "Banking, Housing, and Urban Affairs": "Banca y Vivienda",
+    "Foreign Affairs": "Asuntos Exteriores",
+    "Foreign Relations": "Relaciones Exteriores",
+    "Homeland Security": "Seguridad Nacional",
+    "Homeland Security and Governmental Affairs": "Seguridad Nacional",
+    "Appropriations": "Presupuestos",
+    "Agriculture": "Agricultura",
+    "Agriculture, Nutrition, and Forestry": "Agricultura",
+    "Energy and Natural Resources": "Energía y Recursos Naturales",
+    "Natural Resources": "Recursos Naturales",
+    "Health, Education, Labor, and Pensions": "Sanidad, Educación y Trabajo",
+    "Finance": "Finanzas",
+    "Ways and Means": "Hacienda",
+    "Commerce, Science, and Transportation": "Comercio, Ciencia y Transporte",
+    "Science, Space, and Technology": "Ciencia, Espacio y Tecnología",
+    "Transportation and Infrastructure": "Transporte e Infraestructuras",
+    "Judiciary": "Justicia",
+    "the Judiciary": "Justicia",
+    "Veterans' Affairs": "Veteranos",
+    "Environment and Public Works": "Medio Ambiente y Obras Públicas",
+    "Aging": "Envejecimiento",
+}
+COMPANY_NOISE = re.compile(
+    r"\s*(-\s*)?(Class [A-C] )?(Common Stock|Ordinary Shares|American Depositary Shares.*|"
+    r"Common Shares.*|Registered Shares|New Common Stock|Shares of Beneficial Interest)\b.*$",
+    re.IGNORECASE,
+)
+
+
+def company_name(row):
+    name = re.sub(r"\s*\([A-Z][A-Z0-9.\-]{0,6}\)\s*$", "", get_value(row, "asset_name")).strip()
+    name = COMPANY_NOISE.sub("", name).strip(" -,")
+    return name[:45] or get_value(row, "ticker")
+
+
+def committee_es(name):
+    """'House Committee on Armed Services (Chairman)' -> 'Comité de Fuerzas Armadas (preside)'."""
+    title = ""
+    match = re.search(r"\((Chairman|Chair|Ranking Member|Vice Chair[a-z]*)\)$", name)
+    if match:
+        title = {"Ranking Member": " (portavoz de la oposición)"}.get(match.group(1), " (lo preside)")
+        name = name[: match.start()].strip()
+    name = name.split(" - ")[0]
+    base = re.sub(r"^(House|Senate)( Permanent)?( Select| Special)? Committee on ", "", name)
+    base = re.sub(r"^(House|Senate) ", "", base)
+    return f"Comité de {COMMITTEE_ES.get(base, base)}{title}"
+
+
+def short_date(value):
+    day = _d(value)
+    return f"{day.day} {MONTHS_ES[day.month - 1]}" if day else "fecha n/d"
+
+
+def pct_es(value):
+    if value is None:
+        return "n/d"
+    return f"{value:+.1f} %".replace(".", ",").replace("-", "−")
+
+
+def amount_es(row):
+    amount = get_value(row, "amount").replace(" - ", "–")
+    return amount.replace(",", ".") if amount else "importe n/d"
+
+
+def who_line(row):
+    chamber = "senador/a" if get_value(row, "chamber") == "senate" else "congresista"
+    party = PARTY_ES.get(get_value(row, "party"), get_value(row, "party").lower())
+    state = get_value(row, "state_district")[:2]
+    detail = " ".join(part for part in [chamber, party] if part)
+    return f"{get_value(row, 'politician')} · {detail}" + (f" ({state})" if state else "")
+
+
+def moves(row, prices):
+    """(change since the politician traded, change since it became public)."""
+    ticker = get_value(row, "ticker")
+    if not ticker or prices is None or not prices.has(ticker):
+        return None, None
+    tx_day, filing = _d(get_value(row, "transaction_date")), _d(get_value(row, "filing_date"))
+    _, tx_price = prices.on_or_after(ticker, tx_day) if tx_day else (None, None)
+    _, filing_price = prices.on_or_before(ticker, filing) if filing else (None, None)
+    _, last = prices.latest(ticker)
+    return pct(tx_price, last), pct(filing_price, last)
+
+
+def trade_sentence(row):
+    verbs = {"buy": "Compró", "sell": "Vendió", "sell_partial": "Vendió parte de sus", "exchange": "Canjeó"}
+    if get_value(row, "trade_type") == "sell_partial":
+        what = "opciones sobre" if get_value(row, "asset_type") in ("OP", "Stock Option") else "acciones de"
+        ticker = get_value(row, "ticker")
+        return f"Vendió parte de sus {what} {company_name(row)}" + (f" ({ticker})" if ticker else "") + f" por {amount_es(row)}."
+    verb = verbs.get(get_value(row, "trade_type"), "Operó con")
+    what = "opciones sobre" if get_value(row, "asset_type") in ("OP", "Stock Option") else "acciones de"
+    ticker = get_value(row, "ticker")
+    return f"{verb} {what} {company_name(row)}" + (f" ({ticker})" if ticker else "") + f" por {amount_es(row)}."
+
+
+def why_it_matters(row, conflict_config):
+    labels = conflict_config.get("sectors", {}) if conflict_config else {}
+    sectors = [labels.get(s, {}).get("label", s) for s in get_value(row, "conflict_sectors").split("; ") if s]
+    committees = [c for c in get_value(row, "conflict_committees").split("; ") if c and " - " not in c][:2]
+    if not committees:
+        return ""
+    names = " y ".join(committee_es(c) for c in committees)
+    sector_txt = f" el sector de {', '.join(sectors).lower()}" if sectors else " ese sector"
+    return f"⚠️ Por qué importa: está en el {names}, que supervisa{sector_txt}."
+
+
+def track_record(row, scorecard_lookup):
+    key = get_value(row, "bioguide_id") or get_value(row, "politician")
+    sc = (scorecard_lookup or {}).get(key)
+    if not sc:
+        return ""
+    try:
+        evaluated = int(to_float(get_value(sc, "evaluated_trades") or "0"))
+        excess = to_float(get_value(sc, "avg_excess_90d"))
+        hit = to_float(get_value(sc, "hit_rate"))
+    except ValueError:
+        return ""
+    if evaluated < 3:
+        return ""
+    better = "mejor" if excess >= 0 else "peor"
+    text = (
+        f"📊 Su historial: a los 3 meses, sus compras han ido de media un {abs(excess):.1f} % {better} "
+        f"que el S&P 500 (acierta en el {hit:.0f} % de {evaluated} compras)."
+    ).replace(f"{abs(excess):.1f}", f"{abs(excess):.1f}".replace(".", ","))
+    reasons = get_value(sc, "red_flag_reasons")
+    if get_value(sc, "watchlist") == "YES" and reasons:
+        text += f"\n🔎 Bajo vigilancia porque: {reasons}."
+    return text
+
+
+def build_message(group, prices=None, scorecard_lookup=None, buyers=None, tracker_config=None,
+                  reviews=None, conflict_config=None):
     first_row = group[0][0]
     tags = []
     for _, row_tags in group:
         for tag in row_tags:
             if tag not in tags:
                 tags.append(tag)
-    head_emoji = TAG_EMOJI.get(tags[0], "🔔")
-    top_score = max((score_of(r) for r, _ in group), default=0)
-    title = " · ".join(TAG_LABEL.get(tag, tag) for tag in tags)
-    if "CONFLICTO" in tags:
-        title += f" · score {top_score}"
-    lines = [f"{head_emoji} {title}", member_label(first_row)]
-    committees = get_value(first_row, "conflict_committees") or get_value(first_row, "member_committees")
-    if committees:
-        lines.append(f"Comités: {committees}")
-    sc = scorecard_line(first_row, scorecard_lookup or {})
-    if sc:
-        lines.append(sc)
-    lines.append("")
+    if conflict_config is None:
+        try:
+            conflict_config = load_config()
+        except Exception:
+            conflict_config = {}
+    lines = [HEADLINES.get(tags[0], "🔔 Operación de un político"), who_line(first_row), ""]
     window = (tracker_config or {}).get("alerts", {}).get("cluster_window_days", 30)
     shown, rest = headline_rows(group)
-    for row, row_tags in shown:
+    for index, (row, row_tags) in enumerate(shown):
+        if index:
+            lines.append("")
         if get_value(row, "trade_type") == "paper_filing":
-            lines.append("• Declaración ESCANEADA (no legible automáticamente): revisar el PDF")
+            lines.append("Ha presentado una declaración escaneada que el sistema no puede leer. Ábrela en el enlace para ver qué ha comprado o vendido.")
             continue
-        ticker = get_value(row, "ticker")
-        trade = TRADE_LABEL.get(get_value(row, "trade_type"), get_value(row, "trade_type").upper())
-        option = " (OPCIONES)" if get_value(row, "asset_type") in ("OP", "Stock Option") else ""
+        lines.append(trade_sentence(row))
         delay = get_value(row, "disclosure_delay_days")
-        lines.append(f"• {trade}{option} {ticker} {get_value(row, 'asset_name')[:60]}".replace("  ", " "))
-        lines.append(f"  Importe: {get_value(row, 'amount')} · titular: {get_value(row, 'owner') or 'n/d'}")
-        lines.append(
-            f"  Operación: {get_value(row, 'transaction_date') or 'n/d'} · declarada: "
-            f"{get_value(row, 'filing_date')}" + (f" ({delay} días después)" if delay else "")
-        )
+        when = f"Operó el {short_date(get_value(row, 'transaction_date'))} y lo hizo público el {short_date(get_value(row, 'filing_date'))}"
+        lines.append(when + (f" ({delay} días después)." if delay else "."))
+        since_trade, since_public = moves(row, prices)
+        if since_trade is not None or since_public is not None:
+            lines.append(f"La acción ha cambiado {pct_es(since_trade)} desde que operó y {pct_es(since_public)} desde que se hizo público.")
         if get_value(row, "extraction") == "claude_vision":
-            lines.append("  (leída por IA de una declaración escaneada: verificar en el PDF)")
-        context = price_context(row, prices)
-        if context:
-            lines.append(f"  Mercado: {context}")
-        if "CONFLICTO" in row_tags and get_value(row, "conflict_reason"):
-            lines.append(f"  Conflicto: {get_value(row, 'conflict_reason')}")
+            lines.append("(Leído por IA de una declaración escaneada: compruébalo en el PDF.)")
+        if "CONFLICTO" in row_tags:
+            why = why_it_matters(row, conflict_config)
+            if why:
+                lines.append(why)
         if buyers is not None and get_value(row, "trade_type") == "buy":
             others = other_buyers(buyers, row, window)
             if others:
-                lines.append(f"  También compran {ticker} ({window} días): {', '.join(others[:6])}")
+                lines.append(f"🧲 También la han comprado en el último mes: {', '.join(others[:5])}.")
         if tracker_config:
             replica = replica_line(row, tracker_config, row_tags)
             if replica:
-                lines.append(f"  {replica}")
-        lines.extend(review_lines((reviews or {}).get(make_alert_id(row))))
+                lines.append("✅ " + replica)
+        lines.extend(line.strip() for line in review_lines((reviews or {}).get(make_alert_id(row))))
     if rest:
         buys = sum(1 for r, _ in rest if get_value(r, "trade_type") == "buy")
-        tickers = ", ".join(sorted({get_value(r, "ticker") for r, _ in rest if get_value(r, "ticker")})[:15])
-        lines.append(f"• y {len(rest)} operaciones más ({buys} compras): {tickers}")
-    lines.append("")
-    lines.append(f"Fuente oficial: {get_value(first_row, 'source_url')}")
-    lines.append("Información pública; no es una recomendación de inversión.")
+        tickers = ", ".join(sorted({get_value(r, "ticker") for r, _ in rest if get_value(r, "ticker")})[:12])
+        lines += ["", f"En la misma declaración hay {len(rest)} operaciones más ({buys} compras): {tickers}."]
+    record = track_record(first_row, scorecard_lookup)
+    if record:
+        lines += ["", record]
+    lines += ["", f"Declaración oficial: {get_value(first_row, 'source_url')}",
+              "Datos públicos; no es una recomendación de inversión."]
     return "\n".join(lines)
 
 
@@ -711,17 +852,17 @@ def validate_logic():
     messages = pending_messages(rows, set(), conflict_config, tracker_config, prices, {}, (), today=today)
     by_key = {(g[0][0]["politician"], g[0][0]["filing_id"]): m for g, m in messages}
     conflict_msg = by_key.get(("Test Senator", "F1"))
-    if not conflict_msg or "COMPRA LMT" not in conflict_msg or "COMPRA NOC" not in conflict_msg:
+    if not conflict_msg or "(LMT)" not in conflict_msg or "(NOC)" not in conflict_msg or "Posible información privilegiada" not in conflict_msg:
         raise ValueError(f"Conflict alert missing or incomplete: {by_key.keys()}")
-    if "desde su operación +10.0%" not in conflict_msg or "Trumpito ETF" not in conflict_msg:
+    if "+10,0 % desde que operó" not in conflict_msg or "Trumpito ETF" not in conflict_msg or "Comité de Fuerzas Armadas" not in conflict_msg:
         raise ValueError(f"Conflict alert lacks price/replica context:\n{conflict_msg}")
     pelosi_msg = by_key.get(("Nancy Pelosi", "P1"))
-    if not pelosi_msg or "SEGUIDO" not in pelosi_msg or "(OPCIONES)" not in pelosi_msg:
+    if not pelosi_msg or "político que sigues" not in pelosi_msg or "Compró opciones sobre" not in pelosi_msg:
         raise ValueError(f"Followed-politician alert missing:\n{pelosi_msg}")
-    if ("Nancy Pelosi", "P2") not in by_key or "ESCANEADA" not in by_key[("Nancy Pelosi", "P2")]:
+    if ("Nancy Pelosi", "P2") not in by_key or "declaración escaneada" not in by_key[("Nancy Pelosi", "P2")]:
         raise ValueError("Scanned filing by a followed politician must alert")
     cluster = by_key.get(("C", "C3"))
-    if not cluster or "CLUSTER" not in cluster or "También compran CRWD" not in cluster:
+    if not cluster or "También la han comprado" not in cluster:
         raise ValueError(f"Cluster alert missing:\n{cluster}")
     if ("Test Senator", "F2") in by_key or ("Test Senator", "F4") in by_key:
         raise ValueError("Conflict sells and stale filings must not alert")
@@ -729,7 +870,7 @@ def validate_logic():
         [(base, ["CONFLICTO"])], prices, {}, None, tracker_config,
         {make_alert_id(base): {"suspicion": "4", "thesis": "Contrato del Pentágono días después.", "catalysts": "", "sources": "https://a https://b https://c"}},
     )
-    if "🤖 Sospecha 4/5: Contrato del Pentágono" not in reviewed or "https://c" in reviewed:
+    if "(sospecha 4/5): Contrato del Pentágono" not in reviewed or "https://c" in reviewed:
         raise ValueError(f"Agent review not rendered:\n{reviewed}")
     if "Operaciones declaradas" not in review_context([(base, ["CONFLICTO"])], prices, {}, {}, tracker_config, today):
         raise ValueError("Agent dossier incomplete")

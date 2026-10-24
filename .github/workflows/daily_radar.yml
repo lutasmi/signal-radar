@@ -178,7 +178,8 @@ jobs:
           SEC_EDGAR_ADDITIONAL_OUTCOME: ${{ steps.collect_sec_edgar_additional.outcome }}
           FEC_OUTCOME: ${{ steps.collect_fec.outcome }}
           GRANTS_GOV_OUTCOME: ${{ steps.collect_grants_gov.outcome }}
-        run: python3 scripts/send_capture_summary.py
+        # Telegram is reserved for congress alerts; the capture summary is logged only.
+        run: python3 scripts/send_capture_summary.py --dry-run
 
       - name: Load SEC Form 4
         if: ${{ (github.event_name != 'workflow_dispatch' || inputs.telegram_test != 'true') && steps.collect_sec_form4.outcome == 'success' }}
@@ -241,7 +242,8 @@ jobs:
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        run: python3 scripts/send_telegram_alerts.py
+        # Technical radar alerts stay in Google Sheets (review_queue); logged only, not sent.
+        run: python3 scripts/send_telegram_alerts.py --dry-run
 
       - name: Keep scheduled workflows alive
         if: ${{ always() }}

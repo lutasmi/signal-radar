@@ -152,26 +152,36 @@ def load_prices(trades, session, refresh=True):
     return prices
 
 
-def build_digest(summaries, holdings, scorecard_records_, max_holdings=10):
-    lines = ["📊 Resumen semanal · carteras réplica del Congreso", ""]
+def _pct_es(value):
+    try:
+        return f"{float(value):+.1f} %".replace(".", ",").replace("-", "−")
+    except (TypeError, ValueError):
+        return "n/d"
+
+
+def build_digest(summaries, holdings, scorecard_records_, max_holdings=8):
+    """Weekly Telegram summary in plain Spanish."""
+    lines = ["📊 Resumen semanal de tus carteras", ""]
     for s in summaries:
+        lines.append(f"• {s['name']}")
         lines.append(
-            f"{s['name']}: {s['total_return_pct']}% vs S&P 500 {s['benchmark_return_pct']}% "
-            f"desde {s['start']} · 30d {s['return_30d_pct']}% (SPY {s['benchmark_30d_pct']}%) · "
-            f"posiciones abiertas {s['open_positions']}"
+            f"  Desde {s['start']}: {_pct_es(s['total_return_pct'])} (S&P 500: {_pct_es(s['benchmark_return_pct'])})"
+        )
+        lines.append(
+            f"  Último mes: {_pct_es(s['return_30d_pct'])} (S&P 500: {_pct_es(s['benchmark_30d_pct'])}) · "
+            f"{s['open_positions']} posiciones abiertas"
         )
     main_id = summaries[0]["strategy"] if summaries else ""
     top = [h for h in holdings if h["strategy"] == main_id][:max_holdings]
     if top:
-        lines += ["", f"Mayores posiciones de {summaries[0]['name']}:"]
+        lines += ["", f"Lo que más pesa en {summaries[0]['name'].split(' (')[0]}:"]
         for h in top:
-            flags = " ".join(f for f in ["⚠️conflicto" if h["conflict"] else "", "opciones" if h["options"] else ""] if f)
-            lines.append(f"• {h['ticker']} {h['weight_pct']}% — {h['politicians'][:60]} {flags}".rstrip())
-    ranked = [r for r in scorecard_records_ if r.get("rank")][:5]
-    if ranked:
-        lines += ["", "Top políticos (exceso medio a 90 días vs S&P 500):"]
-        for r in ranked:
-            lines.append(f"{r['rank']}. {r['politician']}: {r['avg_excess_90d']}% en {r['evaluated_trades']} compras, aciertos {r['hit_rate']}%")
+            who = h["politicians"].split("; ")
+            who_txt = who[0] + (f" y {len(who) - 1} más" if len(who) > 1 else "")
+            lines.append(f"• {h['ticker']} ({str(h['weight_pct']).replace('.', ',')} %) — comprada por {who_txt}")
+    watch = [r for r in scorecard_records_ if r.get("watchlist") == "YES"]
+    if watch:
+        lines += ["", f"🔎 Políticos bajo vigilancia: {len(watch)} (" + ", ".join(r["politician"] for r in watch[:6]) + ")"]
     lines += ["", "Simulación con datos públicos; no es una recomendación de inversión."]
     return "\n".join(lines)
 
