@@ -528,7 +528,16 @@ def collect_house(session, since, until, max_filings, delay, vision=None,
 
 
 def senate_session(session):
-    home = get_with_retry(session, SENATE_BASE + "/search/home/")
+    home = None
+    for attempt in range(3):  # the Senate site sometimes answers 403 to cloud IPs; retry
+        try:
+            home = get_with_retry(session, SENATE_BASE + "/search/home/")
+            break
+        except requests.HTTPError as exc:
+            if "403" not in str(exc) or attempt == 2:
+                raise
+            session.cookies.clear()
+            time.sleep(10 * (attempt + 1))
     soup = BeautifulSoup(home.text, "lxml")
     token_input = soup.find("input", {"name": "csrfmiddlewaretoken"})
     if token_input is None:
@@ -877,12 +886,23 @@ def write_status(rows, failures, chambers, path=STATUS_FILE):
     """Small health record read by the daily heartbeat message."""
     from datetime import datetime, timezone
 
-    status = {"finished_at": datetime.now(timezone.utc).replace(microsecond=0).isoformat()}
+    now = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+    previous = {}
+    if path.exists():
+        try:
+            previous = json.loads(path.read_text(encoding="utf-8"))
+        except ValueError:
+            previous = {}
+    status = {"finished_at": now}
     for chamber in ("house", "senate"):
         chamber_rows = [r for r in rows if r["chamber"] == chamber]
+        ok = chamber in chambers and not any(f.startswith(chamber) for f in failures)
         status[chamber] = {
             "checked": chamber in chambers,
-            "ok": chamber in chambers and not any(f.startswith(chamber) for f in failures),
+            "ok": ok,
+            # Last successful download: one blocked run (e.g. a runner IP refused by
+            # the Senate site) is not a problem if a later/earlier run worked.
+            "last_ok": now if ok else previous.get(chamber, {}).get("last_ok", ""),
             "filings": len({r["filing_id"] for r in chamber_rows}),
             "transactions": len(chamber_rows),
         }

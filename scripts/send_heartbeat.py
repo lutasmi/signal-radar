@@ -66,10 +66,11 @@ def build_message(today, step_outcomes, status, runs, new_filings, alerts_sent, 
         if outcome and outcome not in ("success", "skipped"):
             problems.append(f"Hoy ha fallado el paso de {label}.")
     if status:
-        for chamber, label in (("house", "la Cámara de Representantes"), ("senate", "el Senado")):
+        stale = (datetime.now(timezone.utc) - timedelta(hours=26)).isoformat()
+        for chamber, label in (("house", "de la Cámara de Representantes"), ("senate", "del Senado")):
             info = status.get(chamber, {})
-            if info.get("checked") and not info.get("ok"):
-                problems.append(f"No se han podido descargar las declaraciones de {label}.")
+            if info.get("checked") and not info.get("ok") and (info.get("last_ok") or "") < stale:
+                problems.append(f"No se han podido descargar las declaraciones {label} en más de 24 h.")
     else:
         problems.append("No hay registro de la última descarga de declaraciones.")
     if runs is None:
@@ -171,13 +172,20 @@ def validate_logic():
             raise ValueError(f"heartbeat OK message missing {expected!r}:\n{ok}")
     bad = build_message(
         date(2026, 10, 24), {"STEP_COLLECT": "failure"},
-        {"house": {"checked": True, "ok": True}, "senate": {"checked": True, "ok": False}},
+        {"house": {"checked": True, "ok": True}, "senate": {"checked": True, "ok": False, "last_ok": "2026-01-01T00:00:00+00:00"}},
         {"congress_watch.yml": (0, 0), "daily_radar.yml": (0, 1)}, (0, 0), 2, None,
     )
-    for expected in ["⚠️", "descargar las declaraciones", "el Senado", "radar diario ha fallado 1 de 1",
+    for expected in ["⚠️", "descargar las declaraciones", "del Senado en más de 24 h", "radar diario ha fallado 1 de 1",
                      "no se ha ejecutado", "Alertas enviadas en las últimas 24 h: 2"]:
         if expected not in bad:
             raise ValueError(f"heartbeat problem message missing {expected!r}:\n{bad}")
+    recent = (datetime.now(timezone.utc) - timedelta(hours=3)).isoformat()
+    blip = build_message(
+        date(2026, 10, 24), {}, {"house": {"checked": True, "ok": True}, "senate": {"checked": True, "ok": False, "last_ok": recent}},
+        {"congress_watch.yml": (5, 0)}, (1, 1), 0, None,
+    )
+    if "No se han podido" in blip or "✅" not in blip:
+        raise ValueError(f"heartbeat: a single blocked Senate run (recent success) must not alarm:\n{blip}")
     return True
 
 
