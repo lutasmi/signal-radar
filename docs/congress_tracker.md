@@ -22,6 +22,14 @@ Claude visión (escaneados)   ─┘     + comités (congress-legislators) + sec
 El radar diario (`daily_radar.yml`) sigue usando `raw_congress_ptr` para cruzar con
 contratos, insiders y catalizadores (`PTR_BUY_CONFLICT` en `signals`).
 
+## Mensaje diario de control
+
+Cada mañana (cron `37 6 * * *` UTC, ~8:37 en Madrid en verano) llega a Telegram
+"✅ Trumpito · revisión diaria": ejecuciones correctas en las últimas 24 h, declaraciones
+nuevas de Cámara y Senado, alertas enviadas (o "hoy no hay nada que requiera tu atención")
+y la rentabilidad de Trumpito. Si algo falló, el mensaje empieza por ⚠️ y dice qué.
+Si un día no llega, el propio sistema no se ha ejecutado.
+
 ## Alertas
 
 | Etiqueta | Cuándo |

@@ -544,6 +544,11 @@ def validate_all(require_csv=True, csv_dir=FIXTURE_CSV_DIR):
     summary.append(("tracker_logic", validate_tracker_logic()))
     summary.append(("agent_logic", validate_agent_logic()))
     summary.append(("sheet_writes", validate_sheet_writes()))
+    from scripts import send_heartbeat
+
+    send_heartbeat.validate_logic()
+    print("OK heartbeat_logic: all-good and problem messages")
+    summary.append(("heartbeat_logic", 1))
     summary.append(("price_parsing", validate_price_parsing()))
     candidate_summary = validate_candidate_sources.validate_candidate_sources()
     summary.append(("candidate_sources", len(candidate_summary)))

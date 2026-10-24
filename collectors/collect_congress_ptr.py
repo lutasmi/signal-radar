@@ -870,6 +870,28 @@ def parse_args():
     return parser.parse_args()
 
 
+STATUS_FILE = PROJECT_ROOT / "data" / "reference" / "collect_status.json"
+
+
+def write_status(rows, failures, chambers, path=STATUS_FILE):
+    """Small health record read by the daily heartbeat message."""
+    from datetime import datetime, timezone
+
+    status = {"finished_at": datetime.now(timezone.utc).replace(microsecond=0).isoformat()}
+    for chamber in ("house", "senate"):
+        chamber_rows = [r for r in rows if r["chamber"] == chamber]
+        status[chamber] = {
+            "checked": chamber in chambers,
+            "ok": chamber in chambers and not any(f.startswith(chamber) for f in failures),
+            "filings": len({r["filing_id"] for r in chamber_rows}),
+            "transactions": len(chamber_rows),
+        }
+    status["failures"] = failures
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(status, indent=1), encoding="utf-8")
+    return status
+
+
 def main():
     args = parse_args()
     until = date.today()
@@ -932,6 +954,7 @@ def main():
         print(agent_client.usage_line())
         if ledger is not None:
             agent_module.record_usage(ledger, agent_client, "vision")
+    write_status(rows, failures, chambers)
     if failures:
         print("\nPartial failures: " + " | ".join(failures))
     if not rows and failures:

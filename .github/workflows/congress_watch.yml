@@ -25,6 +25,14 @@ on:
         options:
           - "false"
           - "true"
+      heartbeat:
+        description: "Also send the daily 'everything works' message"
+        required: false
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
       weekly:
         description: "Also send the weekly digest and commit the weekly report"
         required: false
@@ -36,6 +44,7 @@ on:
   schedule:
     - cron: "23 */2 * * *"
     - cron: "17 6 * * 1"  # weekly digest + report (Monday)
+    - cron: "37 6 * * *"  # daily heartbeat ("todo funciona") to Telegram
 
 permissions:
   contents: write
@@ -98,6 +107,7 @@ jobs:
           fi
 
       - name: Load Congress PTR into Google Sheets
+        id: load
         if: ${{ steps.collect.outcome == 'success' }}
         env:
           BACKFILL_SINCE: ${{ inputs.backfill_since }}
@@ -139,6 +149,7 @@ jobs:
           git pull --rebase -q origin main && git push -q origin HEAD:main
 
       - name: Send congress alerts
+        id: alerts
         if: ${{ always() }}
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
@@ -151,6 +162,18 @@ jobs:
           else
             python3 scripts/send_congress_alerts.py
           fi
+
+      - name: Daily heartbeat
+        if: ${{ always() && (github.event.schedule == '37 6 * * *' || inputs.heartbeat == 'true') }}
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          GH_TOKEN: ${{ github.token }}
+          STEP_COLLECT: ${{ steps.collect.outcome }}
+          STEP_LOAD: ${{ steps.load.outcome }}
+          STEP_TRACKER: ${{ steps.tracker.outcome }}
+          STEP_ALERTS: ${{ steps.alerts.outcome }}
+        run: python3 scripts/send_heartbeat.py
 
       - name: Save reference cache
         if: ${{ always() }}
