@@ -43,8 +43,11 @@ on:
           - "true"
   schedule:
     - cron: "23 */2 * * *"
-    - cron: "17 6 * * 1"  # weekly digest + report (Monday)
-    - cron: "37 6 * * *"  # daily heartbeat ("todo funciona") to Telegram
+    # Extra morning runs. GitHub often delays or drops scheduled runs, so the
+    # heartbeat and weekly report are decided from state by scripts/schedule_gate.py
+    # on whichever scheduled run comes first, not by matching these cron strings.
+    - cron: "17 6 * * 1"
+    - cron: "37 6 * * *"
 
 permissions:
   contents: write
@@ -79,6 +82,13 @@ jobs:
           key: reference-${{ github.run_id }}
           restore-keys: |
             reference-
+
+      - name: Decide daily heartbeat / weekly report
+        id: gate
+        env:
+          INPUT_HEARTBEAT: ${{ inputs.heartbeat }}
+          INPUT_WEEKLY: ${{ inputs.weekly }}
+        run: python3 scripts/schedule_gate.py
 
       - name: Write Google credentials
         env:
@@ -131,8 +141,9 @@ jobs:
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
-          # Weekly digest + report: Monday schedule or manual "weekly" input.
-          if [ "${{ github.event.schedule }}" = "17 6 * * 1" ] || [ "${{ inputs.weekly }}" = "true" ]; then
+          # Weekly digest + report: first scheduled run of the week (see scripts/schedule_gate.py)
+          # or manual "weekly" input.
+          if [ "${{ steps.gate.outputs.weekly }}" = "true" ]; then
             python3 scripts/build_tracker.py --digest --report reports/weekly_status.md
           else
             python3 scripts/build_tracker.py
@@ -164,7 +175,7 @@ jobs:
           fi
 
       - name: Daily heartbeat
-        if: ${{ always() && (github.event.schedule == '37 6 * * *' || inputs.heartbeat == 'true') }}
+        if: ${{ always() && steps.gate.outputs.heartbeat == 'true' }}
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}

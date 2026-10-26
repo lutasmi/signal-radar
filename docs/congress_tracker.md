@@ -14,7 +14,8 @@ Claude visión (escaneados)   ─┘     + comités (congress-legislators) + sec
         -> data/congress_ptr_latest.csv -> raw_congress_ptr (Sheets)
         -> scripts/build_tracker.py   -> politician_scorecard, replica_holdings,
                                          copy_portfolio_summary / _nav / _positions
-                                         (+ resumen semanal los lunes, con comentario de Claude)
+                                         (+ resumen semanal y reports/weekly_status.md en la
+                                          primera ejecución desde el lunes 06:00 UTC)
         -> scripts/send_congress_alerts.py -> conflict_trades, ptr_manual_review,
                                          agent_review (investigación de Claude) y Telegram
 ```
@@ -24,7 +25,8 @@ contratos, insiders y catalizadores (`PTR_BUY_CONFLICT` en `signals`).
 
 ## Mensaje diario de control
 
-Cada mañana (cron `37 6 * * *` UTC, ~8:37 en Madrid en verano) llega a Telegram
+Cada mañana (primera ejecución programada a partir de las 06:00 UTC; GitHub retrasa o
+salta a veces los cron, así que `scripts/schedule_gate.py` lo decide por estado) llega a Telegram
 "✅ Trumpito · revisión diaria": ejecuciones correctas en las últimas 24 h, declaraciones
 nuevas de Cámara y Senado, alertas enviadas (o "hoy no hay nada que requiera tu atención")
 y la rentabilidad de Trumpito. Si algo falló, el mensaje empieza por ⚠️ y dice qué.

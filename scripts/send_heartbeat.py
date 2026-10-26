@@ -156,6 +156,9 @@ def main():
     if not args.dry_run:
         token, chat_id = telegram.telegram_credentials()
         telegram.send_telegram_message(token, chat_id, message)
+        from scripts.schedule_gate import mark_heartbeat_sent
+
+        mark_heartbeat_sent()
         print("Heartbeat sent")
 
 

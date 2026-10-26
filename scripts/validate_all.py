@@ -549,6 +549,11 @@ def validate_all(require_csv=True, csv_dir=FIXTURE_CSV_DIR):
     send_heartbeat.validate_logic()
     print("OK heartbeat_logic: all-good and problem messages")
     summary.append(("heartbeat_logic", 1))
+    from scripts import schedule_gate
+
+    schedule_gate.validate_logic()
+    print("OK schedule_gate_logic: daily/weekly tasks survive delayed or dropped crons")
+    summary.append(("schedule_gate_logic", 1))
     summary.append(("price_parsing", validate_price_parsing()))
     candidate_summary = validate_candidate_sources.validate_candidate_sources()
     summary.append(("candidate_sources", len(candidate_summary)))
