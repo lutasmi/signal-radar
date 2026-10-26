@@ -213,8 +213,14 @@ def build_report(summaries, groups, watchlist, holdings, alert_rows, today):
     for h in [h for h in holdings if h["strategy"] == main_id][:15]:
         lines.append(f"- {h['ticker']} {h['weight_pct']}% — {h['politicians'][:80]}")
     week_ago = (date.fromisoformat(today) - timedelta(days=7)).isoformat()
-    recent = [r for r in alert_rows if (r.get("sent_at") or "")[:10] > week_ago]
-    lines += ["", f"## Alertas enviadas los últimos 7 días: {len(recent)}", ""]
+    # Only congress alerts (score_band SENT/SUMMARIZED, as in the heartbeat); the old
+    # radar review_queue rows in the same log are no longer sent to Telegram.
+    recent = [
+        r for r in alert_rows
+        if (r.get("sent_at") or "")[:10] > week_ago
+        and (r.get("score_band") or "").startswith(("SENT", "SUMMARIZED"))
+    ]
+    lines += ["", f"## Alertas del Congreso enviadas los últimos 7 días: {len(recent)}", ""]
     for r in recent[-30:]:
         lines.append(f"- {r.get('sent_at', '')[:16]} · {r.get('item_id', '')} · {r.get('score_band', '')}")
     lines += ["", "_Simulación con datos públicos; no es una recomendación de inversión._", ""]

@@ -554,6 +554,17 @@ def validate_all(require_csv=True, csv_dir=FIXTURE_CSV_DIR):
     schedule_gate.validate_logic()
     print("OK schedule_gate_logic: daily/weekly tasks survive delayed or dropped crons")
     summary.append(("schedule_gate_logic", 1))
+    from scripts import build_tracker
+
+    report = build_tracker.build_report([], [], [], [], [
+        {"sent_at": "2026-10-25T08:00:00", "item_id": "f1:AAA", "score_band": "SENT:CONFLICTO"},
+        {"sent_at": "2026-10-25T08:00:00", "item_id": "review_x", "score_band": "HIGH"},
+        {"sent_at": "2026-10-01T08:00:00", "item_id": "f0:BBB", "score_band": "SENT:CONFLICTO"},
+    ], "2026-10-26")
+    if "Alertas del Congreso enviadas los últimos 7 días: 1" not in report:
+        raise ValueError(f"weekly report must count only recent congress alerts:\n{report}")
+    print("OK weekly_report_alerts: only congress alerts of the last 7 days")
+    summary.append(("weekly_report_alerts", 1))
     summary.append(("price_parsing", validate_price_parsing()))
     candidate_summary = validate_candidate_sources.validate_candidate_sources()
     summary.append(("candidate_sources", len(candidate_summary)))
