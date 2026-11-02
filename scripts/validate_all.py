@@ -364,7 +364,13 @@ def validate_price_parsing():
         raise ValueError(f"prices: LMT parsed wrong {parsed.get('LMT')}")
     if parsed.get("BRK.B") != [(date(2026, 10, 19), 400.0)] or "MISSING" in parsed:
         raise ValueError(f"prices: symbol mapping / NaN handling wrong {parsed}")
-    print("OK price_parsing: yfinance batch frame, symbol mapping, NaN dropped")
+    from scripts.build_tracker import price_needs
+
+    trades = [{"ticker": "SPY", "filing_date": date(2025, 9, 17)}, {"ticker": "OLD", "filing_date": date(2024, 1, 2)}]
+    need = price_needs(trades, date(2026, 11, 2))
+    if need["SPY"] != date(2026, 11, 1) or need["OLD"] != date(2025, 2, 5):
+        raise ValueError(f"prices: benchmark must stay current, old tickers capped {need}")
+    print("OK price_parsing: yfinance batch frame, symbol mapping, NaN dropped, benchmark always current")
     return 1
 
 

@@ -133,19 +133,28 @@ def build(raw_rows, prices, config):
     return trades, scorecard, results
 
 
-def load_prices(trades, session, refresh=True):
-    """Load prices; tickers not traded for >400 days only need their old window."""
+def price_needs(trades, today):
+    """{ticker: date its prices must reach}. Tickers not traded for >400 days only
+    need their old window; the benchmark (S&P 500) is the portfolio calendar, so it
+    must always be current even if politicians stopped trading it."""
     from datetime import timedelta
 
     from radar.prices import last_weekday
 
-    prices = PriceStore(session=session, refresh=refresh)
-    tickers = tracker.needed_tickers(trades)
     last_filing = {}
     for trade in trades:
         last_filing[trade["ticker"]] = max(last_filing.get(trade["ticker"], trade["filing_date"]), trade["filing_date"])
-    yesterday = last_weekday(prices.today) - timedelta(days=1)
+    yesterday = last_weekday(today) - timedelta(days=1)
     need = {t: min(yesterday, last_filing[t] + timedelta(days=400)) for t in last_filing}
+    need[BENCHMARK] = yesterday
+    return need
+
+
+def load_prices(trades, session, refresh=True):
+    """Load prices for every traded ticker plus the benchmark."""
+    prices = PriceStore(session=session, refresh=refresh)
+    tickers = tracker.needed_tickers(trades)
+    need = price_needs(trades, prices.today)
     print(f"Tickers needing prices: {len(tickers)}")
     refreshed = prices.prefetch(tickers, need)
     print(f"Tickers refreshed: {refreshed}; downloaded: {prices.downloads}; failed: {len(prices.failed)}")
