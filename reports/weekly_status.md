@@ -1,23 +1,23 @@
-# Congress tracker · informe semanal 2026-10-26
+# Congress tracker · informe semanal 2026-11-02
 
 ## Carteras réplica vs S&P 500
 
 | Cartera | Desde | Total | S&P 500 | 30 días | S&P 500 30d | Abiertas |
 |---|---|---|---|---|---|---|
-| Trumpito ETF (compras en sectores de su comité) | 2024-01-08 | 105.56% | 66.24% | -0.67% | -1.22% | 161 |
-| Réplica Pelosi | 2024-02-26 | 86.68% | 55.92% | -13.85% | -1.22% | 19 |
-| Todo el Congreso (referencia) | 2024-01-04 | 51.39% | 68.84% | -3.49% | -1.22% | 2006 |
+| Trumpito ETF (compras en sectores de su comité) | 2024-01-08 | 105.18% | 64.44% | -0.35% | -0.91% | 161 |
+| Réplica Pelosi | 2024-02-26 | 77.78% | 54.24% | -18.06% | -0.91% | 19 |
+| Todo el Congreso (referencia) | 2024-01-04 | 48.63% | 67.02% | -3.44% | -0.91% | 1975 |
 
 ## Grupos de compras vs S&P 500 (exceso medio)
 
 | Grupo | n (90d) | 30d | 90d | aciertos 90d | 180d | movimiento previo |
 |---|---|---|---|---|---|---|
-| Todas las compras del Congreso | 6330 | 0.28 | -0.36 | 43.93 | -1.24 | -0.69 |
-| Compras SIN relación con su comité | 5721 | 0.23 | -0.64 | 43.16 | -1.84 | -0.94 |
-| Compras en sectores de su comité (conflicto) | 609 | 0.73 | 2.27 | 51.23 | 3.84 | 1.61 |
-| Conflicto + preside/ranking del comité | 184 | -0.62 | 0.24 | 45.65 | 0.37 | -1.48 |
+| Todas las compras del Congreso | 6339 | 0.28 | -0.35 | 43.97 | -1.21 | -0.7 |
+| Compras SIN relación con su comité | 5728 | 0.23 | -0.63 | 43.17 | -1.83 | -0.94 |
+| Compras en sectores de su comité (conflicto) | 611 | 0.73 | 2.33 | 51.39 | 4.12 | 1.61 |
+| Conflicto + preside/ranking del comité | 184 | -0.61 | 0.24 | 45.65 | 0.28 | -1.48 |
 | Conflicto + importe >= 50.001 $ | 29 | 1.9 | 5.81 | 48.28 | 10.25 | 1.09 |
-| Compras declaradas tarde (> 45 días) | 1748 | 0.61 | -2.0 | 39.99 | 0.21 | -1.87 |
+| Compras declaradas tarde (> 45 días) | 1748 | 0.61 | -2.01 | 39.99 | 0.21 | -1.88 |
 | Compras de opciones | 63 | 1.68 | 0.07 | 53.97 | -0.56 | -2.11 |
 | Compras >= 250.001 $ | 41 | 1.89 | -0.08 | 48.78 | 2.7 | 0.93 |
 
@@ -37,53 +37,23 @@
 
 ## Mayores posiciones de la cartera principal
 
-- MSFT 12.29% — Jared Moskowitz; John Fetterman; Josh Gottheimer; Katie Boyd Britt
-- DELL 7.12% — Jared Moskowitz
-- AAPL 6.68% — Ed Case; Katie Boyd Britt; Michael A. Rulli
-- JNJ 3.85% — Alan Armstrong; Lloyd Doggett
-- UNH 3.58% — Alan Armstrong; John Boozman; Julia Letlow; Katie Boyd Britt
-- ABBV 2.83% — Alan Armstrong; Julia Letlow
+- MSFT 12.33% — Jared Moskowitz; John Fetterman; Josh Gottheimer; Katie Boyd Britt
+- DELL 6.68% — Jared Moskowitz
+- AAPL 6.62% — Ed Case; Katie Boyd Britt; Michael A. Rulli
+- JNJ 3.94% — Alan Armstrong; Lloyd Doggett
+- UNH 3.43% — Alan Armstrong; John Boozman; Julia Letlow; Katie Boyd Britt
+- ABBV 2.93% — Alan Armstrong; Julia Letlow
 - CSCO 2.77% — Jared Moskowitz
-- AVGO 2.71% — Jared Moskowitz; Rick W. Allen
+- AVGO 2.74% — Jared Moskowitz; Rick W. Allen
+- AZN 2.56% — Alan Armstrong; Julia Letlow
 - V 2.51% — Byron Donalds; John Boozman; Katie Boyd Britt; Lisa C. McClain
-- PANW 2.39% — Jared Moskowitz; Josh Gottheimer
-- AZN 2.37% — Alan Armstrong; Julia Letlow
-- CVX 2.36% — John Boozman; Tim Walberg
-- MU 2.34% — Dan Newhouse; John Fetterman; Josh Gottheimer; Michael A. Rulli; Sheldon Whiteho
-- META 2.05% — Dan Crenshaw; Jared Moskowitz; Michael A. Rulli; Shelley Moore Capito
-- XOM 1.87% — John Boozman; Katie Boyd Britt; Tim Walberg
+- PANW 2.47% — Jared Moskowitz; Josh Gottheimer
+- CVX 2.46% — John Boozman; Tim Walberg
+- MU 2.42% — Dan Newhouse; John Fetterman; Josh Gottheimer; Michael A. Rulli; Sheldon Whiteho
+- XOM 1.96% — John Boozman; Katie Boyd Britt; Tim Walberg
+- META 1.95% — Dan Crenshaw; Jared Moskowitz; Michael A. Rulli; Shelley Moore Capito
 
-## Alertas enviadas los últimos 7 días: 2469
+## Alertas del Congreso enviadas los últimos 7 días: 0
 
-- 2026-10-24T12:04 · review_e20795d212c9b2bd · HIGH
-- 2026-10-24T12:04 · review_e2f7d0fd4ec3b752 · HIGH
-- 2026-10-24T12:04 · review_e445383380974219 · HIGH
-- 2026-10-24T12:04 · review_e70a7f22ea0eeae2 · HIGH
-- 2026-10-24T12:04 · review_fa3113fd728b63d5 · HIGH
-- 2026-10-24T12:04 · review_f15f3b926d1ce9d3 · HIGH
-- 2026-10-24T12:04 · review_7c69f57b9a040a43 · HIGH
-- 2026-10-24T12:04 · review_0fb36a49da06194f · HIGH
-- 2026-10-24T12:04 · review_050be4dbb43bb568 · HIGH
-- 2026-10-24T12:04 · review_074b782d97df0b08 · HIGH
-- 2026-10-24T12:04 · review_0d5dc50f22e76174 · HIGH
-- 2026-10-24T12:04 · review_5afc33286f21a09d · HIGH
-- 2026-10-24T12:04 · review_b5d62fda3e97b372 · HIGH
-- 2026-10-24T12:04 · review_bb95abf1c87a1a01 · HIGH
-- 2026-10-24T12:04 · review_c915a9ff5ca5ce18 · HIGH
-- 2026-10-24T12:04 · review_f05261e57f3a9233 · HIGH
-- 2026-10-24T12:04 · review_f447e5ab396f00b1 · HIGH
-- 2026-10-24T12:04 · review_2e0e4dd0cbd54a2b · HIGH
-- 2026-10-24T12:04 · review_e1b32a60ef41c8d3 · HIGH
-- 2026-10-24T12:04 · review_cc6c0ab845f7af37 · HIGH
-- 2026-10-24T12:04 · review_d7cd80cfa66a77fd · HIGH
-- 2026-10-24T12:04 · review_1b1ed618d3788d55 · HIGH
-- 2026-10-24T12:04 · review_35f168390211f499 · HIGH
-- 2026-10-24T12:04 · review_4d1bb0ebc0ff61a4 · HIGH
-- 2026-10-24T12:04 · review_516858b25ca4aa92 · HIGH
-- 2026-10-24T12:04 · review_527997e629af7b8a · HIGH
-- 2026-10-24T12:04 · review_6d61f4b33e6b8c2f · HIGH
-- 2026-10-24T12:04 · review_6dca6e5aeca6de76 · HIGH
-- 2026-10-24T12:04 · review_7ad6dfd02979d649 · HIGH
-- 2026-10-24T12:04 · review_e6733b4550ca3b8b · HIGH
 
 _Simulación con datos públicos; no es una recomendación de inversión._
